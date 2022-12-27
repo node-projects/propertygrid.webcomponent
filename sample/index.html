@@ -1,0 +1,41 @@
+<html>
+    <head>
+        <script src="../node_modules/construct-style-sheets-polyfill/dist/adoptedStyleSheets.js"></script>
+        <script type="esms-options">
+            {
+            "shimMode": true
+            }
+        </script>
+        <script src="../node_modules/es-module-shims/dist/es-module-shims.js"></script>
+        <script>
+            const importMap = {
+                imports: {
+                    "@node-projects/base-custom-webcomponent": "./node_modules/@node-projects/base-custom-webcomponent/"
+                }
+            };
+            importShim.addImportMap(importMap);
+
+            importShim('../dist/index.js');
+        </script>
+    </head>
+    <body>
+        <node-projects-propertygrid style="position: absolute; width: 300px; height: 300px;"
+        type-definitions='{ 
+            "type1": {
+                "properties" : [
+                    {
+                        "name": "prop1",
+                        "type": "boolean",
+                        "description": "test1"
+                    }
+                ]
+            }
+        }''>
+        </node-projects-tab>
+        <script type="module">
+            await Promise.all(Array.from(document.body.querySelectorAll(':not(:defined)'), n => customElements.whenDefined(n.localName)));
+            const pg = document.querySelector("node-projects-propertygrid");
+            pg.setSelectedObject(null, "type1");
+        </script>
+    </body>
+</html>

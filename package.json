@@ -1,0 +1,36 @@
+{
+  "name": "@node-projects/propertygrid.webcomponent",
+  "version": "0.0.0",
+  "description": "",
+  "type": "module",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/@node-projects/propertygrid.webcomponent.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/@node-projects/propertygrid.webcomponent/issues"
+  },
+  "homepage": "https://github.com/@node-projects/propertygrid.webcomponent#readme",
+  "scripts": {
+    "tsc": "tsc",
+    "start": "web-dev-server --node-resolve --open sample/index.html",
+    "build": "tsc",
+    "release": "release-it"
+  },
+  "customElements": "custom-elements.json",
+  "webComponentDesigner": "web-component-designer.json",
+  "devDependencies": {
+    "@node-projects/web-component-designer": "^0.0.165",
+    "@web/dev-server": "^0.1.35",
+    "es-module-shims": "^1.6.2",
+    "release-it": "^15.5.1",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "@node-projects/base-custom-webcomponent": "^0.10.7",
+    "construct-style-sheets-polyfill": "^3.1.0"
+  }
+}
