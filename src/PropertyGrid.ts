@@ -225,9 +225,9 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
     public getTypeInfo: (obj: any, type: string) => ITypeInfo = (obj, type) => this.typeDefinitions.find(x => x.name == type);
     public typeDefinitions: ITypeInfo[];
 
-    private _table: HTMLDivElement;
-    private _tree: Wunderbaum;
-    private _head: HTMLDivElement;
+    protected _table: HTMLDivElement;
+    protected _tree: Wunderbaum;
+    protected _head: HTMLDivElement;
 
     public constructor() {
         super();
@@ -320,7 +320,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
     }
 
-    private _selectedObject: any;
+    protected _selectedObject: any;
 
     public get selectedObject(): any {
         return this._selectedObject;
@@ -334,7 +334,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
 
     public typeName: string;
 
-    private createPropertyNodes(baseNode: IPropertyGridWbNodeData[], properties: IProperty[], prefix = '') {
+    protected createPropertyNodes(baseNode: IPropertyGridWbNodeData[], properties: IProperty[], prefix = '') {
         if (!this.noCategory) {
             const groups: Map<string, { [index: string]: IProperty }> = new Map();
 
@@ -368,7 +368,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
     }
 
-    private createPropertyNodesInternal(baseNode: IPropertyGridWbNodeData[], properties: { [index: string]: IProperty }, prefix = '') {
+    protected createPropertyNodesInternal(baseNode: IPropertyGridWbNodeData[], properties: { [index: string]: IProperty }, prefix = '') {
         for (const name in properties) {
             if ((!this.hideProperties || (';' + this.hideProperties + ';').indexOf(';' + name + ';') < 0)) {
                 const p = properties[name];
@@ -566,7 +566,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
     }
 
-    private _renderTree() {
+    protected _renderTree() {
         if (this._tree) {
             this._tree.root.removeChildren();
 
