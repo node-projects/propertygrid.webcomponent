@@ -3,6 +3,7 @@
   "version": "1.0.1",
   "description": "a propertygrid webcomponent.",
   "type": "module",
+  "main": "./dist/PropertyGrid.js",
   "private": false,
   "repository": {
     "type": "git",
