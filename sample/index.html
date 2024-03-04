@@ -1,41 +1,98 @@
 <html>
     <head>
-        <script src="../node_modules/construct-style-sheets-polyfill/dist/adoptedStyleSheets.js"></script>
-        <script type="esms-options">
-            {
-            "shimMode": true
+        <script type="importMap">
+        {
+            "imports": {
+                "@node-projects/base-custom-webcomponent": "./node_modules/@node-projects/base-custom-webcomponent/",
+                "wunderbaum": "./node_modules/wunderbaum/"
             }
+        }
         </script>
-        <script src="../node_modules/es-module-shims/dist/es-module-shims.js"></script>
-        <script>
-            const importMap = {
-                imports: {
-                    "@node-projects/base-custom-webcomponent": "./node_modules/@node-projects/base-custom-webcomponent/"
-                }
-            };
-            importShim.addImportMap(importMap);
-
-            importShim('../dist/index.js');
-        </script>
+        <script type="module" src="../dist/index.js"></script>
     </head>
     <body>
-        <node-projects-propertygrid style="position: absolute; width: 300px; height: 300px;"
-        type-definitions='{ 
-            "type1": {
+        <node-projects-property-grid style="position: absolute; width: 500px; height: 300px;"
+        type-name="type1"
+        expanded
+        type-definitions='[
+            {
+                "name": "type1",
+                "properties" : [
+                    {
+                        "name": "prop1",
+                        "nullable": true,
+                        "type": "boolean",
+                        "description": "test1"
+                    },
+                    {
+                        "name": "prop2",
+                        "nullable": true,
+                        "type": "number",
+                        "description": "test2"
+                    },
+                    {
+                        "name": "prop3",
+                        "defaultValue": "hallo",
+                        "type": "string"
+                    },
+                    {
+                        "name": "prop3_5",
+                        "nullable": true,
+                        "type": "string"
+                    },
+                    {
+                        "name": "prop4",
+                        "nullable": true,
+                        "type": "enum",
+                        "values": ["a", "b", "c"],
+                        "description": "list prop"
+                    },
+                    {
+                        "name": "prop5",
+                        "nullable": true,
+                        "type": "type2",
+                        "description": "subtype"
+                    },
+                    {
+                        "name": "prop6",
+                        "nullable": true,
+                        "type": "any",
+                        "description": "any type"
+                    }
+                ]
+            },
+            {
+                "name": "type2",
                 "properties" : [
                     {
                         "name": "prop1",
                         "type": "boolean",
                         "description": "test1"
+                    },
+                    {
+                        "name": "prop2",
+                        "type": "number",
+                        "description": "test2"
+                    },
+                    {
+                        "name": "prop3",
+                        "defaultValue": "hallo",
+                        "type": "string"
+                    },
+                    {
+                        "name": "prop4",
+                        "type": "enum",
+                        "values": ["a", "b", "c"],
+                        "description": "list prop"
                     }
                 ]
             }
-        }''>
-        </node-projects-tab>
+        ]'>
+        </node-projects-property-grid>
         <script type="module">
             await Promise.all(Array.from(document.body.querySelectorAll(':not(:defined)'), n => customElements.whenDefined(n.localName)));
-            const pg = document.querySelector("node-projects-propertygrid");
-            pg.setSelectedObject(null, "type1");
+            const pg = document.querySelector("node-projects-property-grid");
+            pg.selectedObject = {prop5:{}};
         </script>
     </body>
 </html>

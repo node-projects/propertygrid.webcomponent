@@ -1,7 +1,7 @@
 {
   "name": "@node-projects/propertygrid.webcomponent",
-  "version": "0.0.0",
-  "description": "",
+  "version": "1.0.0",
+  "description": "a propertygrid webcomponent.",
   "type": "module",
   "private": false,
   "repository": {
@@ -21,16 +21,13 @@
     "release": "release-it"
   },
   "customElements": "custom-elements.json",
-  "webComponentDesigner": "web-component-designer.json",
   "devDependencies": {
-    "@node-projects/web-component-designer": "^0.0.165",
-    "@web/dev-server": "^0.1.35",
-    "es-module-shims": "^1.6.2",
-    "release-it": "^15.5.1",
-    "typescript": "^4.9.4"
+    "@web/dev-server": "^0.4.3",
+    "release-it": "^17.1.1",
+    "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@node-projects/base-custom-webcomponent": "^0.10.7",
-    "construct-style-sheets-polyfill": "^3.1.0"
+    "@node-projects/base-custom-webcomponent": "^0.23.0",
+    "wunderbaum": "^0.8.2"
   }
 }

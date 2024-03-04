@@ -1,1 +1,1 @@
-export * from './propertygrid/PropertygridWebcomponent.js'
+export * from './PropertyGrid.js'

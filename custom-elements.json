@@ -4,50 +4,108 @@
     "modules": [
         {
             "kind": "javascript-module",
-            "path": "dist/tab/TabWebcomponent.js",
+            "path": "dist/PropertyGrid.js",
             "declarations": [
                 {
                     "kind": "class",
-                    "description": "A Tab Control",
-                    "name": "TabWebcomponent",
+                    "name": "PropertyGrid",
                     "members": [
                         {
                             "kind": "field",
-                            "name": "selectedIndex",
+                            "name": "noCategory",
                             "type":  {
-                                "text": "number"
+                                "text": "boolean"
+                            }
+                        },
+                        {
+                            "kind": "field",
+                            "name": "hideProperties",
+                            "type":  {
+                                "text": "string"
+                            }
+                        },
+                        {
+                            "kind": "field",
+                            "name": "expanded",
+                            "type":  {
+                                "text": "boolean"
+                            }
+                        },
+                        {
+                            "kind": "field",
+                            "name": "selectedObject",
+                            "type":  {
+                                "text": "object"
+                            }
+                        },
+                        {
+                            "kind": "field",
+                            "name": "typeName",
+                            "type":  {
+                                "text": "string"
+                            }
+                        },
+                        {
+                            "kind": "field",
+                            "name": "getTypeInfo",
+                            "type":  {
+                                "text": "object"
+                            }
+                        },
+                        {
+                            "kind": "field",
+                            "name": "typeDefinitions",
+                            "type":  {
+                                "text": "object"
                             }
                         }
                     ],
                     "attributes": [
                         {
-                            "name": "selected-index",
-                            "fieldName": "selectedIndex"
+                            "name": "no-category",
+                            "fieldName": "noCategory"
+                        },
+                        {
+                            "name": "hide-properties",
+                            "fieldName": "hideProperties"
+                        },
+                        {
+                            "name": "expanded",
+                            "fieldName": "expanded"
+                        },
+                        {
+                            "name": "selected-object",
+                            "fieldName": "selectedObject"
+                        },
+                        {
+                            "name": "type-name",
+                            "fieldName": "typeName"
+                        },
+                        {
+                            "name": "type-definitions",
+                            "fieldName": "typeDefinitions"
                         }
                     ],
                     "events": [
                         {
-                            "name": "selected-index-changed",
-                            "description": "Is raised when the selected index changes",
-                            "type": {
-                                "title": "String"
-                            }
+                            "name": "property-changed",
+                            "description": "Is raised when a properties value changed",
                         }
                     ],
                     "superclass": {
                         "name": "BaseCustomWebComponentConstructorAppend"
                     },
-                    "tagName": "node-projects-tab",
+                    "tagName": "node-projects-property-grid",
                     "customElement": true
                 }
             ],
             "exports": [
                 {
                     "kind": "custom-element-definition",
-                    "name": "node-projects-tab",
+                    "name": "node-projects-property-grid",
                     "declaration": {
-                        "name": "TabWebcomponent",
-                        "module": "dist/tab/TabWebcomponent.js"
+                        "name": "PropertyGrid",
+                        "module": "dist/PropertyGrid.js"
                     }
                 }
             ]
