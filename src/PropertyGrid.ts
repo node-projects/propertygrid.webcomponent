@@ -71,6 +71,8 @@ export function typeInfoFromJsonSchema(jsonSchemaObj: any, obj: any, type: strin
     let usedType = type ?? obj.type;
     if (usedType) {
         const def = jsonSchemaObj.definitions[usedType];
+        if (!def)
+            return null;
         let tInfo: ITypeInfo = {};
         tInfo.name = usedType;
         tInfo.properties = [];
@@ -245,9 +247,9 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
             debugLevel: 0,
             scrollIntoViewOnExpandClick: false,
             iconMap: {
-              expanderCollapsed: new URL("../../assets/images/expander.svg", import.meta.url).toString(),
-              expanderExpanded: new URL("../../assets/images/expanderClose.svg", import.meta.url).toString(),
-              },
+                expanderCollapsed: new URL("../../assets/images/expander.svg", import.meta.url).toString(),
+                expanderExpanded: new URL("../../assets/images/expanderClose.svg", import.meta.url).toString(),
+            },
             quicksearch: true,
             checkbox: false,
             source: [],
