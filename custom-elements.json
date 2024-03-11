@@ -89,7 +89,7 @@
                     "events": [
                         {
                             "name": "property-changed",
-                            "description": "Is raised when a properties value changed",
+                            "description": "Is raised when a properties value changed"
                         }
                     ],
                     "superclass": {
