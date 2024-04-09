@@ -1,7 +1,7 @@
 import { BaseCustomWebComponentConstructorAppend, TypedEvent, css, html } from "@node-projects/base-custom-webcomponent";
 import { Wunderbaum } from 'wunderbaum';
 //@ts-ignore
-import wunderbaumStyle from 'wunderbaum/dist/wunderbaum.css' assert { type: 'css' };
+import wunderbaumStyle from 'wunderbaum/dist/wunderbaum.css' with { type: 'css' };
 import { WunderbaumNode } from "wb_node";
 import { WbNodeData, WbRenderEventType } from "types";
 
