@@ -266,10 +266,10 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                         const pInfo = <IProperty>node.data.property;
                         const ctl = await this.getEditorForType(pInfo, currentValue, pPath, e);
                         if (ctl) {
-                            if (pInfo.defaultValue && (ctl as HTMLInputElement).value == '' && !pInfo.nullable) {
-                                (ctl as HTMLInputElement).placeholder = pInfo.defaultValue;
-                            } else if (pInfo.defaultValue && (ctl as HTMLSelectElement).value == '' && !pInfo.nullable) {
-                                (ctl as HTMLSelectElement).value = pInfo.defaultValue;
+                            if (pInfo.defaultValue && ctl instanceof HTMLInputElement && ctl.value == '' && !pInfo.nullable) {
+                                ctl.placeholder = pInfo.defaultValue;
+                            } else if (pInfo.defaultValue && ctl instanceof HTMLSelectElement && ctl.value == '' && !pInfo.nullable) {
+                                ctl.value = pInfo.defaultValue;
                             }
                             ctl.style.flexGrow = '1';
                             ctl.style.width = '100%';
