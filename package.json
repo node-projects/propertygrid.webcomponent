@@ -24,11 +24,11 @@
   "customElements": "custom-elements.json",
   "devDependencies": {
     "@web/dev-server": "^0.4.6",
-    "release-it": "^17.6.0",
-    "typescript": "^5.5.4"
+    "release-it": "^17.10.0",
+    "typescript": "^5.6.3"
   },
   "dependencies": {
-    "@node-projects/base-custom-webcomponent": "^0.27.6",
+    "@node-projects/base-custom-webcomponent": "^0.27.8",
     "wunderbaum": "^0.11.0"
   }
 }

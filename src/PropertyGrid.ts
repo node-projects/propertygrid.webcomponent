@@ -90,6 +90,7 @@ export function typeInfoFromJsonSchema(jsonSchemaObj: any, obj: any, type: strin
                 }
                 p.description = def.properties[prp].description;
                 p.format = def.properties[prp].format;
+                p.defaultValue = def.properties[prp].default;
                 tInfo.properties.push(p);
             }
         }
@@ -267,6 +268,8 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                         if (ctl) {
                             if (pInfo.defaultValue && (ctl as HTMLInputElement).value == '' && !pInfo.nullable) {
                                 (ctl as HTMLInputElement).placeholder = pInfo.defaultValue;
+                            } else if (pInfo.defaultValue && (ctl as HTMLSelectElement).value == '' && !pInfo.nullable) {
+                                (ctl as HTMLSelectElement).value = pInfo.defaultValue;
                             }
                             ctl.style.flexGrow = '1';
                             ctl.style.width = '100%';
