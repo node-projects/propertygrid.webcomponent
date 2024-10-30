@@ -273,6 +273,8 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                                     ctl.value = pInfo.defaultValue;
                             } else if (pInfo.defaultValue != null && ctl instanceof HTMLSelectElement && ctl.value == '' && !pInfo.nullable) {
                                 ctl.value = pInfo.defaultValue;
+                            } else if (pInfo.defaultValue != null && ctl instanceof HTMLTextAreaElement && ctl.value == '' && !pInfo.nullable) {
+                                ctl.value = pInfo.defaultValue;
                             }
                             ctl.style.flexGrow = '1';
                             ctl.style.width = '100%';
