@@ -267,7 +267,10 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                         const ctl = await this.getEditorForType(pInfo, currentValue, pPath, e);
                         if (ctl) {
                             if (pInfo.defaultValue && ctl instanceof HTMLInputElement && ctl.value == '' && !pInfo.nullable) {
-                                ctl.placeholder = pInfo.defaultValue;
+                                if (ctl.type == 'text')
+                                    ctl.placeholder = pInfo.defaultValue;
+                                else
+                                    ctl.value = pInfo.defaultValue;
                             } else if (pInfo.defaultValue && ctl instanceof HTMLSelectElement && ctl.value == '' && !pInfo.nullable) {
                                 ctl.value = pInfo.defaultValue;
                             }
