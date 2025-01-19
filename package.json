@@ -1,6 +1,6 @@
 {
   "name": "@node-projects/propertygrid.webcomponent",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "description": "a propertygrid webcomponent.",
   "type": "module",
   "main": "./dist/PropertyGrid.js",
