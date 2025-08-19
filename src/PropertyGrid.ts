@@ -26,12 +26,12 @@ interface IPropertyGridWbNodeData extends WbNodeData {
 }
 
 let nullObject: {};
-export function deepValue(obj, path: string, returnNullObject = false) {
+export function deepValue(obj, path: string, returnNullObject = false, splitter = '.') {
     if (path === undefined || path === null) {
         return obj;
     }
 
-    const pathParts = path.split('.');
+    const pathParts = path.split(splitter);
     for (let i = 0; i < pathParts.length; i++) {
         if (obj != null) {
             obj = obj[pathParts[i]];
@@ -83,14 +83,21 @@ export function typeInfoFromJsonSchema(jsonSchemaObj: any, obj: any, type: strin
             if (prp != 'type') {
                 let p: IProperty = {};
                 p.name = prp;
-                p.type = def.properties[prp].type ?? 'any';
-                if (def.properties[prp].enum) {
-                    p.type = 'enum';
-                    p.values = [...def.properties[prp].enum];
+                let prpObj = def.properties[prp];
+                if (prpObj.$ref) {
+                    if ((<string>prpObj.$ref).startsWith('#/')) {
+                        const linkName = (<string>prpObj.$ref).substring(2);
+                        prpObj = deepValue(def, linkName, false, '/');
+                    }
                 }
-                p.description = def.properties[prp].description;
-                p.format = def.properties[prp].format;
-                p.defaultValue = def.properties[prp].default;
+                p.type = prpObj.type ?? 'any';
+                if (prpObj.enum) {
+                    p.type = 'enum';
+                    p.values = [...prpObj.enum];
+                }
+                p.description = prpObj.description;
+                p.format = prpObj.format;
+                p.defaultValue = prpObj.default;
                 tInfo.properties.push(p);
             }
         }
