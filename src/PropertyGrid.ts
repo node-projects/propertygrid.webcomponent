@@ -87,7 +87,7 @@ export function typeInfoFromJsonSchema(jsonSchemaObj: any, obj: any, type: strin
                 if (prpObj.$ref) {
                     if ((<string>prpObj.$ref).startsWith('#/')) {
                         const linkName = (<string>prpObj.$ref).substring(2);
-                        prpObj = deepValue(def, linkName, false, '/');
+                        prpObj = deepValue(jsonSchemaObj, linkName, false, '/');
                     }
                 }
                 p.type = prpObj.type ?? 'any';
