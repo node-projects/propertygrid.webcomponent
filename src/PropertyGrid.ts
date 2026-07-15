@@ -255,6 +255,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
             debugLevel: 0,
             scrollIntoViewOnExpandClick: false,
             iconMap: {
+                ...Wunderbaum.iconMaps.bootstrap,
                 expanderCollapsed: new URL("../../assets/images/expander.svg", import.meta.url).toString(),
                 expanderExpanded: new URL("../../assets/images/expanderClose.svg", import.meta.url).toString(),
             },
@@ -417,12 +418,51 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
 
     public getSpecialEditorForType: (property: IProperty, currentValue, propertyPath: string, wbRender: WbRenderEventType, additionalInfo?: any) => Promise<HTMLElement | null>
 
+    public async getNullableWrapper(childControl: HTMLElement, property: IProperty, currentValue, propertyPath: string, wbRender: WbRenderEventType, additionalInfo?: any): Promise<HTMLElement> {
+        let ct = document.createElement('div');
+        ct.style.display = 'flex';
+
+        let editor = document.createElement('input');
+        editor.type = 'checkbox';
+        editor.title = 'checked when not null';
+        editor.checked = currentValue != null;
+        editor.style.marginRight = '5px';
+
+        editor.onchange = e => {
+            if (!editor.checked) {
+                //(<any>childControl).disabled = true;
+                //childControl.setAttribute('disabled', '');
+                this.setPropertyValue(propertyPath, null);
+            } else {
+                //(<any>childControl).disabled = false;
+                //childControl.removeAttribute('disabled');
+                this.setPropertyValue(propertyPath, null);
+            }
+        }
+        ct.appendChild(editor);
+        childControl.style.flexGrow = '1';
+        ct.appendChild(childControl);
+
+        return ct;
+    }
+
     public async getEditorForType(property: IProperty, currentValue, propertyPath: string, wbRender: WbRenderEventType, additionalInfo?: any): Promise<HTMLElement> {
         if (this.getSpecialEditorForType) {
             let edt = await this.getSpecialEditorForType(property, currentValue, propertyPath, wbRender, additionalInfo);
             if (edt)
                 return edt;
         }
+
+        if (property.nullable && property.type !== 'any') {
+            const edt = await this.getSimpleEditorForType(property, currentValue, propertyPath, wbRender, additionalInfo);
+            const wrp = await this.getNullableWrapper(edt, property, currentValue, propertyPath, wbRender, additionalInfo);
+            return wrp;
+        }
+
+        return this.getSimpleEditorForType(property, currentValue, propertyPath, wbRender, additionalInfo);
+    }
+
+    public async getSimpleEditorForType(property: IProperty, currentValue, propertyPath: string, wbRender: WbRenderEventType, additionalInfo?: any): Promise<HTMLElement> {
         switch (property.type) {
             case 'any': {
                 let editor = document.createElement('div');
