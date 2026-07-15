@@ -250,6 +250,8 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
     public ready(): void {
         this._parseAttributesToProperties();
 
+        this.shadowRoot.adoptedStyleSheets = [wunderbaumStyle, PropertyGrid.style];
+
         this._tree = new Wunderbaum({
             element: this._table,
             debugLevel: 0,
@@ -318,8 +320,6 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         if (this.selectedObject) {
             this.updateTree();
         }
-
-        this.shadowRoot.adoptedStyleSheets = [wunderbaumStyle, PropertyGrid.style];
     }
 
     private updateDescription(data: WunderbaumNode) {
