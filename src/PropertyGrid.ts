@@ -258,8 +258,8 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
             scrollIntoViewOnExpandClick: false,
             iconMap: {
                 ...Wunderbaum.iconMaps.bootstrap,
-                expanderCollapsed: new URL("../../assets/images/expander.svg", import.meta.url).toString(),
-                expanderExpanded: new URL("../../assets/images/expanderClose.svg", import.meta.url).toString(),
+                expanderCollapsed: new URL("../assets/images/expander.svg", import.meta.url).toString(),
+                expanderExpanded: new URL("../assets/images/expanderClose.svg", import.meta.url).toString(),
             },
             quicksearch: true,
             checkbox: false,
