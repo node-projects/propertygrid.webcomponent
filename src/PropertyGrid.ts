@@ -232,12 +232,13 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
 
     public propertyNodeContextMenu = new TypedEvent<{ event: MouseEvent, property: IProperty, propertyPath: string, value: any }>;
 
-    public getTypeInfo: (obj: any, type: string) => ITypeInfo = (obj, type) => this.typeDefinitions.find(x => x.name == type);
+    public getTypeInfo: (obj: any, type: string) => Promise<ITypeInfo> = async (obj, type) => this.typeDefinitions.find(x => x.name == type);
     public typeDefinitions: ITypeInfo[];
 
     protected _table: HTMLDivElement;
     protected _tree: Wunderbaum;
     protected _head: HTMLDivElement;
+    private _updateVersion = 0;
 
     public constructor() {
         super();
@@ -318,7 +319,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         });
 
         if (this.selectedObject) {
-            this.updateTree();
+            void this.updateTree();
         }
     }
 
@@ -345,14 +346,14 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
     }
     public set selectedObject(value: any) {
         this._selectedObject = value;
-        this.updateTree();
+        void this.updateTree();
     }
 
     public propertyChanged = new TypedEvent<{ property: string; newValue: any }>();
 
     public typeName: string;
 
-    protected createPropertyNodes(baseNode: IPropertyGridWbNodeData[], properties: IProperty[], prefix = '') {
+    protected async createPropertyNodes(baseNode: IPropertyGridWbNodeData[], properties: IProperty[], prefix = ''): Promise<void> {
         if (!this.noCategory) {
             const groups: Map<string, { [index: string]: IProperty }> = new Map();
 
@@ -369,7 +370,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
 
             for (const g of groups) {
                 if (g[0] == '') {
-                    this.createPropertyNodesInternal(baseNode, g[1], prefix);
+                    await this.createPropertyNodesInternal(baseNode, g[1], prefix);
                 } else {
                     const children = [];
                     baseNode.push({
@@ -377,20 +378,20 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                         folder: true,
                         children: children,
                     });
-                    this.createPropertyNodesInternal(children, g[1], prefix);
+                    await this.createPropertyNodesInternal(children, g[1], prefix);
                 }
             }
         } else {
             //@ts-ignore
-            this.createPropertyNodesInternal(baseNode, properties.reduce((obj, cur) => ({ ...obj, [cur.name]: cur }), {}), prefix);
+            await this.createPropertyNodesInternal(baseNode, properties.reduce((obj, cur) => ({ ...obj, [cur.name]: cur }), {}), prefix);
         }
     }
 
-    protected createPropertyNodesInternal(baseNode: IPropertyGridWbNodeData[], properties: { [index: string]: IProperty }, prefix = '') {
+    protected async createPropertyNodesInternal(baseNode: IPropertyGridWbNodeData[], properties: { [index: string]: IProperty }, prefix = ''): Promise<void> {
         for (const name in properties) {
             if ((!this.hideProperties || (';' + this.hideProperties + ';').indexOf(';' + name + ';') < 0)) {
                 const p = properties[name];
-                const subTypeInfo = this.getTypeInfo(null, p.type);
+                const subTypeInfo = await this.getTypeInfo(null, p.type);
                 if (subTypeInfo != null) {
                     const children = [];
                     baseNode.push({
@@ -399,7 +400,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                         property: p,
                         expanded: this.expanded,
                     });
-                    this.createPropertyNodes(children, subTypeInfo.properties, prefix + name + '.');
+                    await this.createPropertyNodes(children, subTypeInfo.properties, prefix + name + '.');
                 } else {
                     baseNode.push({
                         title: name,
@@ -600,11 +601,12 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         return null;
     }
 
-    public refresh() {
-        this.updateTree();
+    public refresh(): Promise<void> {
+        return this.updateTree();
     }
 
-    private updateTree() {
+    private async updateTree(): Promise<void> {
+        const updateVersion = ++this._updateVersion;
         if (this._head) {
             if (this._selectedObject != null) {
                 if (this._selectedObject.$type) {
@@ -612,9 +614,11 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                 }
             }
             if (this.selectedObject) {
-                let tInfo = this.getTypeInfo(this.selectedObject, this.typeName);
+                let tInfo = await this.getTypeInfo(this.selectedObject, this.typeName);
+                if (updateVersion !== this._updateVersion)
+                    return;
                 this._head.innerText = tInfo.name;
-                this._renderTree();
+                await this._renderTree(tInfo);
             } else {
                 this._head.innerText = '';
                 this.clear();
@@ -623,13 +627,16 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
     }
 
-    protected _renderTree() {
+    protected async _renderTree(typeInfo?: ITypeInfo): Promise<void> {
+        const updateVersion = this._updateVersion;
         if (this._tree) {
-            this._tree.root.removeChildren();
-
             const rootObject: IPropertyGridWbNodeData[] = [];
 
-            this.createPropertyNodes(rootObject, this.getTypeInfo(this.selectedObject, this.typeName).properties);
+            typeInfo ??= await this.getTypeInfo(this.selectedObject, this.typeName);
+            await this.createPropertyNodes(rootObject, typeInfo.properties);
+            if (updateVersion !== this._updateVersion)
+                return;
+            this._tree.root.removeChildren();
             this._tree.addChildren(rootObject);
         }
     }
