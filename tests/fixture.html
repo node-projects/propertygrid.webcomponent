@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <script type="importmap">
+    {
+        "imports": {
+            "@node-projects/base-custom-webcomponent": "../node_modules/@node-projects/base-custom-webcomponent/dist/index.js",
+            "wunderbaum": "../node_modules/wunderbaum/dist/wunderbaum.esm.js",
+            "wunderbaum/dist/wunderbaum.css": "../node_modules/wunderbaum/dist/wunderbaum.css"
+        }
+    }
+    </script>
+    <style>
+        node-projects-property-grid { display: block; width: 440px; height: 300px; }
+    </style>
+</head>
+<body>
+    <script>
+        window.definitions = [{ name: 'Example', properties: [
+            { name: 'title', type: 'string', description: 'Title description' },
+            { name: 'count', type: 'number', nullable: true },
+            { name: 'enabled', type: 'boolean' },
+            { name: 'mode', type: 'enum', values: ['a', 'b'] },
+            { name: 'extra', type: 'any' },
+            { name: 'nested', type: 'Nested' },
+            { name: 'grouped', type: 'string', category: 'General' }
+        ] }, { name: 'Nested', properties: [{ name: 'child', type: 'string' }] }];
+        window.createGrid = (parent = document.body, id = 'grid') => {
+            const grid = document.createElement('node-projects-property-grid');
+            grid.id = id;
+            grid.showHead = true;
+            grid.expanded = true;
+            grid.typeName = 'Example';
+            grid.typeDefinitions = definitions;
+            grid.selectedObject = { title: 'Hello', count: 3, enabled: true, mode: 'a', extra: 'Notes', nested: { child: 'Child' }, grouped: 'Group' };
+            parent.append(grid);
+            return grid;
+        };
+    </script>
+</body>
+</html>

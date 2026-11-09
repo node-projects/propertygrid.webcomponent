@@ -19,10 +19,13 @@
     "tsc": "tsc",
     "start": "web-dev-server --node-resolve --open sample/index.html",
     "build": "tsc",
+    "test": "npm run build && PLAYWRIGHT_BROWSERS_PATH=0 playwright test",
+    "test:install": "PLAYWRIGHT_BROWSERS_PATH=0 playwright install chromium",
     "release": "release-it"
   },
   "customElements": "custom-elements.json",
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@web/dev-server": "^1.0.0",
     "release-it": "^20.2.1",
     "typescript": "^7.0.2"

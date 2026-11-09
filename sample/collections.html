@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Collection editing</title>
+    <script type="importmap">
+    { "imports": {
+        "@node-projects/base-custom-webcomponent": "../node_modules/@node-projects/base-custom-webcomponent/dist/index.js",
+        "wunderbaum": "../node_modules/wunderbaum/dist/wunderbaum.esm.js",
+        "wunderbaum/dist/wunderbaum.css": "../node_modules/wunderbaum/dist/wunderbaum.css"
+    } }
+    </script>
+    <style>
+        body { margin: 24px; font: 16px system-ui; }
+        main { max-width: 850px; margin: auto; }
+        node-projects-property-grid { height: 330px; width: 100%; }
+        pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; }
+        button { font: inherit; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Lists and dictionaries</h1>
+    <p>Edit opens an isolated draft. Apply replaces once; Cancel and Escape discard it.
+        Records include a nested string list and an optional detail record: Enable detail
+        creates its default, while clearing it keeps null. Untouched values stay untouched,
+        and invalid numeric edits must be repaired even after scrolling.
+        Dictionary keys may contain dots or be empty.</p>
+    <label><input id="replacement" type="checkbox"> Replace the string-list editor with a custom control</label>
+    <node-projects-property-grid id="grid"></node-projects-property-grid>
+    <h2>Applied object</h2>
+    <pre id="output" aria-live="polite"></pre>
+    <p id="events"></p>
+</main>
+<script type="module">
+    import '../dist/index.js';
+    const grid = document.querySelector('#grid');
+    const output = document.querySelector('#output');
+    const events = document.querySelector('#events');
+    grid.showHead = true;
+    grid.typeName = 'Settings';
+    grid.typeDefinitions = [{ name: 'Settings', properties: [
+        { name: 'tags', type: 'array', collection: { item: { type: 'string' } } },
+        { name: 'modes', type: 'array', collection: { item: { type: 'enum', values: ['draft', 'ready'] } } },
+        { name: 'weights', type: 'dictionary', collection: { item: { type: 'number' } } },
+        { name: 'records', type: 'array', nullable: true, collection: {
+            item: { type: 'Record' },
+            createItem: async () => ({ title: 'New record', enabled: true, tags: [] })
+        } }
+    ] }, { name: 'Record', properties: [
+        { name: 'title', type: 'string' }, { name: 'enabled', type: 'boolean' },
+        { name: 'tags', type: 'array', collection: { item: { type: 'string' } } },
+        { name: 'detail', type: 'Detail', nullable: true }
+    ] }, { name: 'Detail', properties: [{ name: 'note', type: 'string', defaultValue: 'New detail' }] }];
+    grid.selectedObject = { tags: ['alpha', 'beta'], modes: ['draft'], weights: { 'a.b': 1, '': 2 }, records: [{ title: 'First', enabled: true, tags: ['nested'] }] };
+    let count = 0;
+    const show = () => { output.textContent = JSON.stringify(grid.selectedObject, null, 2); events.textContent = `${count} applied change events`; };
+    grid.propertyChanged.on(() => { count++; show(); });
+    show();
+    document.querySelector('#replacement').onchange = async event => {
+        grid.getSpecialEditorForType = event.target.checked ? async (property, value, path) => {
+            if (property.name !== 'tags') return null;
+            const owner = grid.selectedObject;
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'display:flex;gap:4px;min-width:0';
+            const input = document.createElement('input');
+            input.setAttribute('aria-label', 'Tags separated by commas');
+            input.value = value.join(', ');
+            input.style.cssText = 'min-width:0;width:100%';
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = 'Replace';
+            button.setAttribute('aria-label', 'Replace tags');
+            button.onclick = () => {
+                if (grid.selectedObject !== owner || !wrapper.isConnected) return;
+                grid.setPropertyValue(path, input.value === '' ? [] : input.value.split(',').map(value => value.trim()));
+            };
+            wrapper.append(input, button);
+            return wrapper;
+        } : null;
+        await grid.refresh();
+    };
+</script>
+</body>
+</html>
