@@ -523,5 +523,11 @@ public styling API. Also usable in
 
 ### Release (maintainers only)
 
-Run `npm run release` only when a release is intended, then create the GitHub release
-from the uploaded tag to trigger npm publication.
+Create and publish a GitHub release with an unused version tag (for example,
+`v2.0.2` or `2.0.2`) to publish the npm package. The publish workflow takes the
+version from that tag, updates the npm manifests, builds, and publishes to npm.
+Pushes and draft GitHub releases do not publish an npm package.
+
+Optionally, use `npm run release` to prepare and push a version commit and tag.
+This command does not create a GitHub release or publish to npm; publish the
+GitHub release manually when ready.
