@@ -2,3 +2,8 @@ src/
 sample/
 node_modules/
 tsconfig.json
+tests/
+docs/
+playwright.config.js
+test-results/
+playwright-report/

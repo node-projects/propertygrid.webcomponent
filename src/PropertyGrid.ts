@@ -3,7 +3,11 @@ import { Wunderbaum } from 'wunderbaum';
 //@ts-ignore
 import wunderbaumStyle from 'wunderbaum/dist/wunderbaum.css' with { type: 'css' };
 import { WunderbaumNode } from "wb_node";
-import { WbNodeData, WbRenderEventType } from "types";
+import type { ChangeType, UpdateOptions, WbNodeData, WbRenderEventType } from "types";
+import { CollectionEditor } from './CollectionEditor.js';
+import type { ICollectionOptions } from './CollectionModel.js';
+export type { ICollectionOptions, CollectionValue } from './CollectionModel.js';
+export type { CollectionEditorAdapter } from './CollectionEditor.js';
 
 export interface ITypeInfo {
     properties?: IProperty[];
@@ -12,10 +16,11 @@ export interface ITypeInfo {
 export interface IProperty {
     category?: string;
     name?: string;
-    type?: 'object' | 'string' | 'number' | 'boolean' | 'color' | 'enum' | 'any';
-    values?: string[]; //on a enum type
+    type?: string; // Built-ins include array/dictionary; other strings resolve named types.
+    values?: (string | number | boolean)[]; // Collection drafts retain primitive enum types.
     description?: string;
-    defaultValue?: string;
+    defaultValue?: unknown;
+    collection?: ICollectionOptions;
     nullable?: boolean;
     format?: string;
 }
@@ -23,6 +28,24 @@ export interface IProperty {
 interface IPropertyGridWbNodeData extends WbNodeData {
     property?: IProperty;
     propertyPath?: string;
+}
+
+// Handle the owned tree's resize requests (including its ResizeObserver) in one
+// synchronous pass. Other updates, validation and plugin behavior stay native.
+class PropertyGridTree extends Wunderbaum {
+    public constructor(options: ConstructorParameters<typeof Wunderbaum>[0], private readonly _resize: (update: () => void) => void) {
+        super(options);
+    }
+
+    public override update(change: ChangeType, options?: UpdateOptions): void;
+    public override update(change: ChangeType, node: WunderbaumNode, options?: UpdateOptions): void;
+    public override update(change: ChangeType, nodeOrOptions?: WunderbaumNode | UpdateOptions, options?: UpdateOptions): void {
+        if (change === 'resize' && this._resize) {
+            this._resize(() => super.update(change, { immediate: true }));
+        } else {
+            super.update(change, nodeOrOptions as WunderbaumNode, options);
+        }
+    }
 }
 
 let nullObject: {};
@@ -68,9 +91,45 @@ export function setDeepValue(obj, path: string, value) {
 }
 
 export function typeInfoFromJsonSchema(jsonSchemaObj: any, obj: any, type: string): ITypeInfo {
+    const encode = (segment: string) => segment.replaceAll('~', '~0').replaceAll('/', '~1');
+    const pointer = (path: string) => path.split('/').reduce((value, segment) => value?.[segment.replaceAll('~1', '/').replaceAll('~0', '~')], jsonSchemaObj);
+    const collectionDefinitions = new Set<string>();
+    const scanCollections = (schema: any, item = false) => {
+        if (!schema || typeof schema !== 'object') return;
+        if (item && typeof schema.$ref === 'string' && schema.$ref.startsWith('#/definitions/'))
+            collectionDefinitions.add(schema.$ref.slice('#/definitions/'.length).replaceAll('~1', '/').replaceAll('~0', '~'));
+        for (const [key, child] of Object.entries(schema))
+            if (child && typeof child === 'object') scanCollections(child, item || key === 'items' || key === 'additionalProperties');
+    };
+    scanCollections(jsonSchemaObj);
+    for (const name of collectionDefinitions) scanCollections(jsonSchemaObj.definitions?.[name], true);
+    // Collection schemas retain local object references as named types. Scalar and
+    // ordinary reference handling below deliberately follows the existing converter.
+    const collectionItem = (schema: any, path: string): IProperty | null => {
+        if (!schema || typeof schema !== 'object' || schema.oneOf || schema.anyOf || schema.allOf) return null;
+        if (typeof schema.$ref === 'string' && schema.$ref.startsWith('#/definitions/')) {
+            const encoded = schema.$ref.slice('#/definitions/'.length);
+            const name = encoded.replaceAll('~1', '/').replaceAll('~0', '~');
+            if (!encoded || encoded.includes('/') || !jsonSchemaObj.definitions?.[name]) return null;
+            return { type: name, defaultValue: schema.default, description: schema.description, format: schema.format };
+        }
+        const common = { defaultValue: schema.default, description: schema.description, format: schema.format };
+        if (schema.enum) return { ...common, type: 'enum', values: [...schema.enum] };
+        if (schema.type === 'array' && schema.items && !Array.isArray(schema.items)) {
+            const item = collectionItem(schema.items, path + '/items');
+            return item ? { ...common, type: 'array', collection: { item } } : null;
+        }
+        if (schema.type === 'object' && !schema.properties && !schema.patternProperties && schema.additionalProperties && typeof schema.additionalProperties === 'object' && !Array.isArray(schema.additionalProperties)) {
+            const item = collectionItem(schema.additionalProperties, path + '/additionalProperties');
+            return item ? { ...common, type: 'dictionary', collection: { item } } : null;
+        }
+        if (schema.type === 'object' && schema.properties) return { ...common, type: '#/' + path };
+        if (['string', 'number', 'boolean'].includes(schema.type)) return { ...common, type: schema.type };
+        return null;
+    };
     let usedType = type ?? obj.type;
     if (usedType) {
-        const def = jsonSchemaObj.definitions[usedType];
+        const def = usedType.startsWith('#/') ? pointer(usedType.slice(2)) : jsonSchemaObj.definitions?.[usedType];
         if (!def)
             return null;
         let tInfo: ITypeInfo = {};
@@ -84,6 +143,22 @@ export function typeInfoFromJsonSchema(jsonSchemaObj: any, obj: any, type: strin
                 let p: IProperty = {};
                 p.name = prp;
                 let prpObj = def.properties[prp];
+                const schemaPath = (usedType.startsWith('#/') ? usedType.slice(2) : 'definitions/' + encode(usedType)) + '/properties/' + encode(prp);
+                const collection = collectionItem(prpObj, schemaPath);
+                if (collection && (collection.type === 'array' || collection.type === 'dictionary')) {
+                    p.type = collection.type;
+                    p.collection = collection.collection;
+                    p.description = prpObj.description;
+                    p.defaultValue = prpObj.default;
+                    tInfo.properties.push(p);
+                    continue;
+                }
+                // Only private collection object descendants gain recursive paths;
+                // leave the converter's ordinary object/reference behavior alone.
+                if ((usedType.startsWith('#/') || collectionDefinitions.has(usedType)) && collection) {
+                    tInfo.properties.push({ ...collection, name: prp });
+                    continue;
+                }
                 if (prpObj.$ref) {
                     if ((<string>prpObj.$ref).startsWith('#/')) {
                         const linkName = (<string>prpObj.$ref).substring(2);
@@ -112,6 +187,26 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
             display: block;
             height: 100%;
             width: 100%;
+            /* Public inputs stay undefined here so themes can inherit through wrappers. */
+            --wb-font-stack: var(--pg-font-family, Helvetica, sans-serif);
+            --wb-background-color: var(--pg-background, #ffffff);
+            --wb-node-text-color: var(--pg-color, #56534c);
+            --wb-border-color: var(--pg-border-color, #56534c);
+            --wb-grid-color: var(--pg-grid-color, #dedede);
+            --wb-grid-color-grayscale: var(--pg-grid-color, #dedede);
+            --wb-col-padding-x: var(--pg-cell-padding-x, 2px);
+            --wb-focus-border-color: var(--pg-focus-color, #275dc5);
+            --wb-hover-color: var(--pg-hover-background, rgb(247.1401574803, 251.5590551181, 253.6598425197));
+            --wb-active-color: var(--pg-selected-background, #e5f3fb);
+            --wb-active-border-color: var(--pg-selected-border-color, #70c0e7);
+            --wb-active-hover-color: var(--pg-selected-hover-background, #dceff8);
+            --wb-active-hover-border-color: var(--pg-selected-hover-border-color, #26a0da);
+            --wb-active-color-grayscale: var(--pg-selected-background, #f0f0f0);
+            --wb-active-border-color-grayscale: var(--pg-selected-border-color, rgb(171.5, 171.5, 171.5));
+            --wb-active-hover-color-grayscale: var(--pg-selected-hover-background, #eaeaea);
+            --wb-active-column-color: var(--pg-selected-background, rgb(247.1401574803, 251.5590551181, 253.6598425197));
+            --wb-active-cell-color: var(--pg-selected-background, rgb(125.1417322835, 198.1496062992, 232.8582677165));
+            --wb-active-cell-color-grayscale: var(--pg-selected-background, #b3b3b3);
         }
 
         * {
@@ -119,6 +214,10 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
 
         #tableDiv {
+            background: var(--pg-background, transparent);
+            color: var(--pg-color, inherit);
+            font-family: var(--pg-font-family, inherit);
+            font-size: var(--pg-font-size, inherit);
             height: 100%;
             display: grid;
             overflow: auto;
@@ -147,9 +246,11 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
 
         #head {
-            border-bottom: 1px lightgray solid;
+            border-bottom: var(--pg-header-border, 1px lightgray solid);
             grid-area: head;
-            font-size: 10pt;
+            color: var(--pg-header-color, inherit);
+            font-size: var(--pg-header-font-size, 10pt);
+            font-weight: var(--pg-header-font-weight, inherit);
             overflow: hidden;
         }
 
@@ -158,8 +259,8 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
             position: sticky;
             top: 0;
             left: 1px;
-            background: #f0f0f0;
-            padding-left: 5px;
+            background: var(--pg-header-background, #f0f0f0);
+            padding: var(--pg-header-padding, 0 0 0 5px);
         }
 
         #tableInnerDiv {
@@ -170,10 +271,17 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
 
         #table {
+            font-size: var(--pg-font-size, 14px);
+            border: var(--pg-tree-border, 2px solid var(--wb-border-color));
+            border-radius: var(--pg-tree-radius, 4px);
             user-select: none;
             overflow: auto;
             width: calc(100% - 1px);
             table-layout: fixed;
+        }
+
+        #table:focus, #table:focus-within {
+            border-color: var(--wb-focus-border-color);
         }
 
         #lastCol {
@@ -181,37 +289,183 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
 
         #description {
-            font-family: tahoma, arial, helvetica;
-            font-size: 10pt;
-            padding: 5px;
+            font-family: var(--pg-description-font-family, var(--pg-font-family, tahoma, arial, helvetica));
+            font-size: var(--pg-description-font-size, 10pt);
+            padding: var(--pg-description-padding, 5px);
             grid-area: description;
-            background-color: #e6e6e6;
+            background-color: var(--pg-description-background, #e6e6e6);
+            color: var(--pg-description-color, inherit);
+            border-top: var(--pg-description-border, none);
+            min-height: var(--pg-description-min-height, auto);
+            max-height: var(--pg-description-max-height, none);
+            overflow: auto;
+            font-weight: var(--pg-description-font-weight, inherit);
+        }
+
+        #descTitel {
+            margin: var(--pg-description-title-margin, 1.33em 0);
+            font-weight: var(--pg-description-title-font-weight, bold);
         }
 
         #descText {
+            margin: var(--pg-description-text-margin, 1em 0);
             white-space: break-spaces;
+        }
+
+        div.wunderbaum.wb-grid div.wb-node-list div.wb-row:hover:not(.wb-active):not(.wb-selected) {
+            border-color: var(--pg-hover-border-color, transparent);
+            border-bottom-color: var(--pg-hover-border-color, var(--wb-grid-color));
+        }
+
+        div.wunderbaum.wb-grid div.wb-node-list div.wb-row.wb-focus:hover:not(.wb-active):not(.wb-selected) {
+            border-color: var(--pg-hover-border-color, var(--wb-active-border-color));
+            border-bottom-color: var(--pg-hover-border-color, var(--wb-grid-color));
+        }
+
+        /* Inherited style queries opt in without touching the original border cascade.
+           Native borders preserve author/validation paint; 'none' hides color, not width. */
+        @container style(--pg-row-separator-style) or style(--pg-row-separator-color) {
+            div.wunderbaum.wb-grid div.wb-node-list div.wb-row:not(.wb-active):where(:not(:hover):not(.wb-selected):not(.wb-focus):not(.wb-invalid, .wb-error, .wb-busy, .wb-status-error)) {
+                border-bottom: 1px var(--pg-row-separator-style, solid) var(--pg-row-separator-color, var(--wb-grid-color));
+            }
+            @container style(--pg-row-separator-style: none) {
+                div.wunderbaum.wb-grid div.wb-node-list div.wb-row:not(.wb-active):where(:not(:hover):not(.wb-selected):not(.wb-focus):not(.wb-invalid, .wb-error, .wb-busy, .wb-status-error)) {
+                    border-bottom: 1px solid transparent;
+                }
+            }
+        }
+        @container style(--pg-cell-separator-style) or style(--pg-cell-separator-color) {
+            div.wunderbaum.wb-grid div.wb-node-list div.wb-row:where(:not(.wb-invalid, .wb-error, .wb-busy, .wb-status-error)) span.wb-col:where(:not(.wb-invalid, .wb-error, .wb-busy, .wb-status-error)) {
+                border-right: 1px var(--pg-cell-separator-style, solid) var(--pg-cell-separator-color, var(--wb-grid-color));
+            }
+            @container style(--pg-cell-separator-style: none) {
+                div.wunderbaum.wb-grid div.wb-node-list div.wb-row:where(:not(.wb-invalid, .wb-error, .wb-busy, .wb-status-error)) span.wb-col:where(:not(.wb-invalid, .wb-error, .wb-busy, .wb-status-error)) {
+                    border-right: 1px solid transparent;
+                }
+            }
+        }
+        @layer property-grid-backgrounds {
+            :where(.wb-node-list .wb-row:not(:hover):not(.wb-active):not(.wb-selected)) {
+                background-color: var(--pg-row-background, revert-layer);
+            }
+            :where(.wb-node-list .wb-row:nth-of-type(even):not(:hover):not(.wb-active):not(.wb-selected)) {
+                background-color: var(--pg-alternate-row-background, var(--pg-row-background, revert-layer));
+            }
+            :where(.wb-node-list [part~="category-row"]:not(:hover):not(.wb-active):not(.wb-selected)) {
+                background-color: var(--pg-category-background, var(--pg-row-background, revert-layer));
+            }
+        }
+        :where([part~="category-row"]) {
+            font-weight: var(--pg-category-font-weight, inherit);
+        }
+        div.wunderbaum.wb-grid div.wb-node-list div.wb-row[part~="category-row"] span.wb-col[part~="property-name"] {
+            padding-left: calc(var(--wb-col-padding-x) + var(--pg-category-name-inset, 0px));
+        }
+
+        /* Low-priority defaults leave ordinary and later layered author rules intact. */
+        @layer property-grid-editors {
+            :where(input[part~="editor"], select[part~="editor"], textarea[part~="editor"], button[part~="editor"]) {
+                background: var(--pg-editor-background, revert);
+                color: var(--pg-editor-color, revert);
+                border: var(--pg-editor-border, revert);
+                border-radius: var(--pg-editor-radius, revert);
+                padding: var(--pg-editor-padding, revert);
+                font-family: var(--pg-editor-font-family, var(--pg-font-family, revert));
+                font-size: var(--pg-editor-font-size, revert);
+                accent-color: var(--pg-editor-accent-color, auto);
+            }
+
+            :where([part~="editor"]:focus-visible) {
+                outline-color: var(--pg-editor-focus-color, var(--pg-focus-color, revert));
+                outline-style: var(--pg-editor-focus-style, revert);
+                outline-width: var(--pg-editor-focus-width, revert);
+            }
+            @container style(--pg-editor-height) {
+                :where(input[part~="editor"]:not([type="checkbox"]):not([type="radio"]), select[part~="editor"], textarea[part~="editor"], button[part~="editor"]) {
+                    height: var(--pg-editor-height);
+                    max-height: var(--wb-row-inner-height);
+                    min-width: 0;
+                }
+                :where([part~="editor-wrapper"]) {
+                    align-items: center;
+                    max-height: var(--wb-row-inner-height);
+                    min-width: 0;
+                }
+                :where(input[part~="editor"]:is([type="checkbox"], [type="radio"])) {
+                    align-self: center;
+                }
+            }
+            @container style(--pg-editor-focus-border) {
+                :where([part~="property-value"] [part~="editor"] input[part~="editor"]:not([type="checkbox"]):not([type="radio"]):focus,
+                    [part~="property-value"] [part~="editor"] select[part~="editor"]:focus) {
+                    border: var(--pg-editor-focus-border);
+                }
+            }
+        }
+        @container style(--pg-editor-height) {
+            .form-control:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea, button):where([part~="editor"]) {
+                height: min(var(--pg-editor-height), var(--wb-row-inner-height));
+                max-height: var(--wb-row-inner-height);
+            }
+        }
+
+        /* Keep Wunderbaum's native border defaults, but allow the public input to win. */
+        div.wunderbaum.wb-grid div.wb-node-list div.wb-row span.wb-col input.wb-input-edit:where([part~="editor"]),
+        div.wunderbaum.wb-grid div.wb-node-list div.wb-row span.wb-col > select:where([part~="editor"]),
+        div.wunderbaum.wb-grid div.wb-node-list div.wb-row span.wb-col > :is(
+            input[type="color"], input[type="date"], input[type="datetime"], input[type="datetime-local"],
+            input[type="email"], input[type="month"], input[type="number"], input[type="password"],
+            input[type="search"], input[type="tel"], input[type="text"], input[type="time"],
+            input[type="url"], input[type="week"]
+        ):where([part~="editor"]) {
+            border: var(--pg-editor-border, none);
+        }
+
+        div.wunderbaum.wb-grid div.wb-node-list div.wb-row span.wb-col > :is(input, select):where([part~="editor"]):focus {
+            border: var(--pg-editor-focus-border, 1px dashed #70c0e7);
         }
 
         textarea {
             resize: none;
         }
 
+        [part~="collection-dialog"]::backdrop {
+            background: var(--pg-collection-backdrop, rgb(0 0 0 / 35%));
+        }
+        [part~="collection-action"], [part~="collection-key"] {
+            box-sizing: border-box;
+            background: var(--pg-editor-background, Field);
+            color: var(--pg-editor-color, FieldText);
+            border: var(--pg-editor-border, 1px solid #888);
+            border-radius: var(--pg-editor-radius, 3px);
+            padding: var(--pg-editor-padding, 4px 8px);
+            font: inherit;
+        }
+        [part~="collection-action"]:focus-visible, [part~="collection-key"]:focus-visible {
+            outline: 2px solid var(--pg-editor-focus-color, var(--pg-focus-color, #275dc5));
+            outline-offset: 2px;
+        }
+        [part~="collection-action"]:disabled {
+            opacity: 0.5;
+        }
+
         div.wunderbaum span.wb-node i.wb-expander {
-            background-size: 12px 12px;
-            background-position-x: 3px;
-            background-position-y: 3px;
+            background-size: var(--pg-expander-size, 12px) var(--pg-expander-size, 12px);
+            background-position: var(--pg-expander-position, 3px 3px);
+            filter: var(--pg-expander-filter, none);
+            opacity: var(--pg-expander-opacity, 1);
         }`;
 
     public static override readonly template = html` 
-        <div id="tableDiv">
-            <div id="head"></div>
-            <div id="tableInnerDiv">
-                <div id="table"></div>
+        <div id="tableDiv" part="container">
+            <div id="head" part="header"></div>
+            <div id="tableInnerDiv" part="tree-container">
+                <div id="table" part="tree"></div>
             </div>
 
-            <div id="description">
-                <h4 id="descTitel"></h4>
-                <p id="descText"></p>
+            <div id="description" part="description">
+                <h4 id="descTitel" part="description-title"></h4>
+                <p id="descText" part="description-text"></p>
             </div>
         </div>`;
 
@@ -222,23 +476,199 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         selectedObject: Object,
         typeName: String,
         getTypeInfo: Function,
-        typeDefinitions: Object
+        getSpecialEditorForType: Function,
+        typeDefinitions: Object,
+        additionalStyleSheets: Array,
+        rowHeight: Number,
+        nameColumnRatio: Number,
+        showHead: Boolean,
+        showDescription: Boolean
     };
 
     public noCategory: boolean;
     public hideProperties: string;
     public expanded: boolean;
-    public showHead: boolean;
 
     public propertyNodeContextMenu = new TypedEvent<{ event: MouseEvent, property: IProperty, propertyPath: string, value: any }>;
 
-    public getTypeInfo: (obj: any, type: string) => Promise<ITypeInfo> = async (obj, type) => this.typeDefinitions.find(x => x.name == type);
+    public getTypeInfo: (obj: any, type: string) => Promise<ITypeInfo> = async (obj, type) => this.typeDefinitions?.find(x => x.name == type);
     public typeDefinitions: ITypeInfo[];
 
     protected _table: HTMLDivElement;
     protected _tree: Wunderbaum;
     protected _head: HTMLDivElement;
     private _updateVersion = 0;
+    private _collectionEditors = new Set<CollectionEditor>();
+    private _additionalStyleSheets: readonly CSSStyleSheet[] = [];
+    private _rowHeight = 22;
+    private _nameColumnRatio = 0.5;
+    private _showHead = false;
+    private _showDescription = true;
+    private _editorRoots = new WeakSet<HTMLElement>();
+    private _editorObserver = new MutationObserver(records => {
+        const roots = new Set<HTMLElement>();
+        for (const record of records) {
+            if (!record.addedNodes.length || !this._table.contains(record.target))
+                continue;
+            let element = record.target as HTMLElement;
+            while (element && element !== this._table) {
+                if (this._editorRoots.has(element)) {
+                    roots.add(element);
+                    break;
+                }
+                element = element.parentElement;
+            }
+        }
+        for (const root of roots)
+            this._markEditorParts(root);
+        if (records.some(record => record.removedNodes.length)) {
+            for (const editor of this._collectionEditors) {
+                if (!this._table.contains(editor.control) && records.some(record => Array.from(record.removedNodes).some(node => node === editor.control || node.contains(editor.control)))) {
+                    editor.dispose();
+                    this._collectionEditors.delete(editor);
+                }
+            }
+        }
+    });
+
+    /** JavaScript-only constructed sheets, appended after the built-in sheets. */
+    public get additionalStyleSheets(): readonly CSSStyleSheet[] {
+        return [...this._additionalStyleSheets];
+    }
+    public set additionalStyleSheets(value: readonly CSSStyleSheet[]) {
+        const sheets = [...value];
+        // Adopt first so native adoption errors leave the last accepted list intact.
+        this.shadowRoot.adoptedStyleSheets = [wunderbaumStyle, PropertyGrid.style, ...sheets];
+        this._additionalStyleSheets = sheets;
+    }
+
+    /** Fixed row geometry in CSS pixels; use this instead of CSS-only row sizing. */
+    public get rowHeight(): number {
+        return this._rowHeight;
+    }
+    public set rowHeight(value: number) {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 4)
+            throw new RangeError('rowHeight must be a finite number of at least 4 CSS pixels.');
+        this._rowHeight = value;
+        this._applyRowHeight();
+    }
+
+    private _applyRowHeight(): void {
+        if (this._table) {
+            this._table.style.setProperty('--wb-row-outer-height', `${this._rowHeight}px`);
+            this._table.style.setProperty('--wb-row-inner-height', `${this._rowHeight - 2}px`);
+        }
+        if (this._tree) {
+            this._tree.setOption('rowHeightPx', this._rowHeight);
+            this._tree.update('resize' as ChangeType, { immediate: true });
+        }
+    }
+
+    private _resizePreservingEditors(update: () => void): void {
+        if (!this._tree)
+            return;
+        // Wunderbaum's status redraw clears DOM-only validation classes, even on
+        // retained cells. Preserve only this synchronous pass: async validation or
+        // external clears between resize deliveries must remain authoritative.
+        const feedback = new Map<Element, string[]>();
+        for (const element of this._table.querySelectorAll('.wb-row, .wb-col')) {
+            const classes = ['wb-invalid', 'wb-error', 'wb-busy', 'wb-status-error'].filter(name => element.classList.contains(name));
+            if (classes.length)
+                feedback.set(element, classes);
+        }
+        const focused = this.shadowRoot.activeElement;
+        if (focused && this._table.contains(focused)) {
+            const node = Wunderbaum.getNode(focused);
+            if (node) {
+                // A density increase can move a deep row beyond the OLD scroll
+                // extent. Synchronize the owned list's extent before scrollTo so
+                // native scrollTop clamping cannot discard the focused editor.
+                let count = 0;
+                this._tree.visitRows(() => { count++; });
+                this._tree.nodeListElement.style.height = `${count * this._rowHeight}px`;
+                // Force layout after region display changes, then scroll BEFORE the
+                // render window is recalculated. No blur, focus replay or rebuilding.
+                this._tree.scrollTo(node);
+            }
+        }
+        try {
+            update();
+        } finally {
+            for (const [element, classes] of feedback) {
+                if (this._table.contains(element))
+                    element.classList.add(...classes);
+            }
+        }
+    }
+
+    /** Relative name-column share; invalid values retain the last accepted ratio. */
+    public get nameColumnRatio(): number {
+        return this._nameColumnRatio;
+    }
+    public set nameColumnRatio(value: number) {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value >= 1)
+            throw new RangeError('nameColumnRatio must be a finite number strictly between 0 and 1.');
+        this._nameColumnRatio = value;
+        if (this._tree) {
+            const [name, content] = this._tree.columns;
+            name.width = value;
+            content.width = 1 - value;
+            delete name.customWidthPx;
+            delete content.customWidthPx;
+            this._tree.update('resize' as ChangeType, { immediate: true });
+        }
+    }
+
+    public get showHead(): boolean {
+        return this._showHead;
+    }
+    public set showHead(value: boolean) {
+        this._showHead = !!value;
+        this._applyRegionVisibility();
+    }
+
+    public get showDescription(): boolean {
+        return this._showDescription;
+    }
+    public set showDescription(value: boolean) {
+        this._showDescription = !!value;
+        this._applyRegionVisibility();
+    }
+
+    private _applyRegionVisibility(): void {
+        if (this._head)
+            this._head.style.display = this._showHead ? 'block' : 'none';
+        const description = this.shadowRoot?.getElementById('description');
+        if (description)
+            description.style.display = this._showDescription ? 'block' : 'none';
+        this._tree?.update('resize' as ChangeType, { immediate: true });
+    }
+
+    private _addParts(element: Element | null | undefined, ...parts: string[]): void {
+        element?.part.add(...parts);
+    }
+
+    private _markEditorParts(editor: HTMLElement): void {
+        this._addParts(editor, 'editor');
+        // querySelectorAll intentionally does not enter custom editors' shadow roots.
+        for (const control of [editor, ...editor.querySelectorAll('input, select, textarea, button')]) {
+            if (control.localName === 'input') {
+                this._addParts(control, 'editor', 'editor-input', `editor-${(control as HTMLInputElement).type}`);
+            } else if (control.matches('select, textarea, button')) {
+                this._addParts(control, 'editor', `editor-${control.localName}`);
+            }
+        }
+    }
+
+    private _ownsEditorTarget(updateVersion: number, wbRender?: WbRenderEventType, row?: HTMLElement): boolean {
+        if (updateVersion !== this._updateVersion)
+            return false;
+        // Public editor creation without render context and detached grids remain supported.
+        if (!wbRender)
+            return true;
+        return !!row && wbRender.node._rowElem === row && wbRender.nodeElem.parentElement === row &&
+            wbRender.renderColInfosById['value']?.elem.parentElement === row && this._table.contains(row);
+    }
 
     public constructor() {
         super();
@@ -246,14 +676,19 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
 
         this._table = this._getDomElement<HTMLDivElement>('table');
         this._head = this._getDomElement<HTMLDivElement>('head');
+        this._applyRegionVisibility();
+        // Observe only the owned table; weak roots do not retain discarded virtual rows.
+        this._editorObserver.observe(this._table, { childList: true, subtree: true });
     }
 
     public ready(): void {
         this._parseAttributesToProperties();
+        this._applyRegionVisibility();
 
-        this.shadowRoot.adoptedStyleSheets = [wunderbaumStyle, PropertyGrid.style];
+        this.shadowRoot.adoptedStyleSheets = [wunderbaumStyle, PropertyGrid.style, ...this._additionalStyleSheets];
+        this._applyRowHeight();
 
-        this._tree = new Wunderbaum({
+        this._tree = new PropertyGridTree({
             element: this._table,
             debugLevel: 0,
             scrollIntoViewOnExpandClick: false,
@@ -267,33 +702,59 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
             source: [],
             header: false,
             icon: false,
+            rowHeightPx: this._rowHeight,
             render: async e => {
+                const node = e.node;
+                const row = e.nodeElem.parentElement;
+                const mainCol = e.allColInfosById['*'];
+                const valueCol = e.renderColInfosById['value'];
+                this._addParts(row, 'row');
+                if (node.children)
+                    this._addParts(row, node.data.property ? 'object-row' : 'category-row');
+                this._addParts(mainCol?.elem, 'property-name');
+                this._addParts(valueCol?.elem, 'property-value');
+                this._addParts(e.nodeElem.querySelector('.wb-expander'), 'expander');
                 if (e.isNew) {
-                    const node = e.node;
-                    if (!node.children) {
-                        const valueCol = e.renderColInfosById['value'];
+                    if (!node.children && valueCol && mainCol) {
+                        const updateVersion = this._updateVersion;
                         const pPath = <string>node.data.propertyPath;
                         const currentValue = deepValue(this._selectedObject, pPath);
                         const pInfo = <IProperty>node.data.property;
                         const ctl = await this.getEditorForType(pInfo, currentValue, pPath, e);
+                        // A detached grid can still render. Check ownership, not isConnected:
+                        // virtualization/refresh may replace the row or its cells during the await.
+                        if (!this._ownsEditorTarget(updateVersion, e, row)) {
+                            // A collection factory may finish after its row vanished,
+                            // before its control was ever inserted/observed.
+                            for (const editor of this._collectionEditors) {
+                                if (editor.control === ctl) {
+                                    editor.dispose();
+                                    this._collectionEditors.delete(editor);
+                                }
+                            }
+                            return;
+                        }
                         if (ctl) {
+                            this._editorRoots.add(ctl);
+                            this._markEditorParts(ctl);
                             if (pInfo.defaultValue != null && ctl instanceof HTMLInputElement && ctl.value == '' && !pInfo.nullable) {
                                 if (ctl.type == 'text')
-                                    ctl.placeholder = pInfo.defaultValue;
+                                    ctl.placeholder = String(pInfo.defaultValue);
                                 else
-                                    ctl.value = pInfo.defaultValue;
+                                    ctl.value = String(pInfo.defaultValue);
                             } else if (pInfo.defaultValue != null && ctl instanceof HTMLSelectElement && ctl.value == '' && !pInfo.nullable) {
-                                ctl.value = pInfo.defaultValue;
+                                ctl.value = String(pInfo.defaultValue);
                             } else if (pInfo.defaultValue != null && ctl instanceof HTMLTextAreaElement && ctl.value == '' && !pInfo.nullable) {
-                                ctl.value = pInfo.defaultValue;
+                                ctl.value = String(pInfo.defaultValue);
                             }
                             ctl.style.flexGrow = '1';
                             ctl.style.width = '100%';
                             valueCol.elem.style.display = 'flex';
                             valueCol.elem.appendChild(ctl);
+                            // connectedCallback may synchronously create light-DOM controls.
+                            this._markEditorParts(ctl);
                         }
 
-                        const mainCol = e.allColInfosById['*'];
                         mainCol.elem.title = mainCol.elem.innerText;
                         mainCol.elem.oncontextmenu = (e) => {
                             e.preventDefault();
@@ -306,8 +767,8 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                 }
             },
             columns: [
-                { id: "*", title: "name", width: "*" },
-                { id: "value", title: "value", width: "*" },
+                { id: "*", title: "name", width: this._nameColumnRatio },
+                { id: "value", title: "value", width: 1 - this._nameColumnRatio },
             ],
             click: (e) => {
                 this.updateDescription(e.node);
@@ -316,7 +777,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                 if (this.expanded)
                     this._tree.root.expandAll(true);
             }
-        });
+        }, update => this._resizePreservingEditors(update));
 
         if (this.selectedObject) {
             void this.updateTree();
@@ -391,7 +852,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         for (const name in properties) {
             if ((!this.hideProperties || (';' + this.hideProperties + ';').indexOf(';' + name + ';') < 0)) {
                 const p = properties[name];
-                const subTypeInfo = await this.getTypeInfo(null, p.type);
+                const subTypeInfo = p.type === 'array' || p.type === 'dictionary' ? null : await this.getTypeInfo(null, p.type);
                 if (subTypeInfo != null) {
                     const children = [];
                     baseNode.push({
@@ -421,11 +882,13 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
 
     public async getNullableWrapper(childControl: HTMLElement, property: IProperty, currentValue, propertyPath: string, wbRender: WbRenderEventType, additionalInfo?: any): Promise<HTMLElement> {
         let ct = document.createElement('div');
+        this._addParts(ct, 'editor-wrapper', 'nullable-editor');
         ct.style.display = 'flex';
 
         let editor = document.createElement('input');
         editor.type = 'checkbox';
         editor.title = 'checked when not null';
+        this._addParts(editor, 'nullable-toggle');
         editor.checked = currentValue != null;
         editor.style.marginRight = '5px';
 
@@ -448,12 +911,23 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
     }
 
     public async getEditorForType(property: IProperty, currentValue, propertyPath: string, wbRender: WbRenderEventType, additionalInfo?: any): Promise<HTMLElement> {
+        const updateVersion = this._updateVersion;
+        const row = wbRender?.nodeElem.parentElement;
+        const collection = property.type === 'array' || property.type === 'dictionary';
         if (this.getSpecialEditorForType) {
             let edt = await this.getSpecialEditorForType(property, currentValue, propertyPath, wbRender, additionalInfo);
+            // Guard before built-in any creation, which intentionally initializes the value.
+            if (!this._ownsEditorTarget(updateVersion, wbRender, row))
+                return null;
+            if (collection && wbRender && deepValue(this._selectedObject, propertyPath) !== currentValue)
+                return null;
             if (edt)
                 return edt;
         }
 
+        if (property.type === 'array' || property.type === 'dictionary') {
+            return this.getSimpleEditorForType(property, currentValue, propertyPath, wbRender, additionalInfo);
+        }
         if (property.nullable && property.type !== 'any') {
             const edt = await this.getSimpleEditorForType(property, currentValue, propertyPath, wbRender, additionalInfo);
             const wrp = await this.getNullableWrapper(edt, property, currentValue, propertyPath, wbRender, additionalInfo);
@@ -465,10 +939,28 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
 
     public async getSimpleEditorForType(property: IProperty, currentValue, propertyPath: string, wbRender: WbRenderEventType, additionalInfo?: any): Promise<HTMLElement> {
         switch (property.type) {
+            case 'array':
+            case 'dictionary': {
+                const version = this._updateVersion;
+                const row = wbRender?.nodeElem.parentElement;
+                const object = this._selectedObject;
+                const editor = new CollectionEditor(property, {
+                    owner: this,
+                    read: () => deepValue(this._selectedObject, propertyPath),
+                    ownsTarget: () => object === this._selectedObject && this._ownsEditorTarget(version, wbRender, row),
+                    commit: value => this.setPropertyValue(propertyPath, value),
+                    resolve: (obj, type) => this.getTypeInfo(obj, type),
+                    createGrid: () => document.createElement('node-projects-property-grid') as PropertyGrid
+                });
+                this._collectionEditors.add(editor);
+                return editor.control;
+            }
             case 'any': {
                 let editor = document.createElement('div');
+                this._addParts(editor, 'editor-wrapper', 'any-editor');
                 editor.style.display = 'flex';
                 let sel = document.createElement('select');
+                this._addParts(sel, 'any-type-selector');
 
                 const op0 = document.createElement('option');
                 op0.value = 'null';
@@ -586,8 +1078,8 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                 editor.style.width = '100%';
                 for (let v of property.values) {
                     const op = document.createElement('option');
-                    op.value = v;
-                    op.innerText = v;
+                    op.value = String(v);
+                    op.innerText = String(v);
                     editor.appendChild(op);
                 }
                 editor.onchange = () => {
@@ -607,6 +1099,7 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
 
     private async updateTree(): Promise<void> {
         const updateVersion = ++this._updateVersion;
+        this._disposeCollectionEditors();
         if (this._head) {
             if (this._selectedObject != null) {
                 if (this._selectedObject.$type) {
@@ -623,7 +1116,6 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                 this._head.innerText = '';
                 this.clear();
             }
-            this._head.style.display = this.showHead ? 'block' : 'none';
         }
     }
 
@@ -642,7 +1134,22 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
     }
 
     public clear() {
-        this._tree.root.removeChildren();
+        if (this._collectionEditors.size) {
+            ++this._updateVersion;
+            this._disposeCollectionEditors();
+        }
+        this._tree?.root.removeChildren();
+    }
+
+    private _disposeCollectionEditors(): void {
+        for (const editor of this._collectionEditors) editor.dispose();
+        this._collectionEditors.clear();
+    }
+
+    public disconnectedCallback(): void {
+        if (this._collectionEditors.size) {
+            for (const editor of this._collectionEditors) editor.dispose();
+        }
     }
 }
 customElements.define("node-projects-property-grid", PropertyGrid);

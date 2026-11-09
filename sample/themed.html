@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Property grid theme builder</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "@node-projects/base-custom-webcomponent": "../node_modules/@node-projects/base-custom-webcomponent/dist/index.js",
+            "wunderbaum": "../node_modules/wunderbaum/dist/wunderbaum.esm.js",
+            "wunderbaum/dist/wunderbaum.css": "../node_modules/wunderbaum/dist/wunderbaum.css"
+        }
+    }
+    </script>
+    <style>
+        body { font: 14px system-ui; margin: 24px; background: #fafbfc; }
+        h1 { margin-bottom: 8px; }
+        h2 { font-size: 19px; }
+        p { line-height: 1.5; }
+        button, select, input, textarea { font: inherit; }
+        button, select, input[type="number"] { padding: 5px 8px; }
+        button { cursor: pointer; }
+        button[aria-disabled="true"] { cursor: wait; opacity: 0.65; }
+        :focus-visible { outline: 2px solid #275dc5; outline-offset: 2px; }
+        .builder, .export { border: 1px solid #c6cdd6; border-radius: 8px; padding: 16px; margin: 20px 0; }
+        .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+        .groups { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin-top: 16px; }
+        fieldset { min-width: 0; border: 1px solid #c6cdd6; border-radius: 5px; padding: 12px; }
+        legend { font-weight: 600; padding: 0 4px; }
+        .colors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }
+        .control { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+        .control label { min-width: 0; }
+        .control input[type="color"] { width: 44px; height: 30px; padding: 2px; flex-shrink: 0; }
+        .control input[type="number"] { width: 64px; }
+        .control select { min-width: 0; max-width: 60%; }
+        input[aria-invalid="true"] { outline: 2px solid #ad2828; }
+        #density { width: 100%; }
+        .help { color: #4a5565; font-size: 13px; }
+        main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; max-width: 1100px; }
+        main section { min-width: 0; }
+        node-projects-property-grid { display: block; width: 100%; height: 350px; }
+        textarea { box-sizing: border-box; width: 100%; height: 310px; padding: 12px; font: 13px/1.5 monospace; white-space: pre; }
+        pre { overflow: auto; padding: 12px; background: #edf0f4; }
+        #copyStatus { min-height: 1.5em; }
+        @media (max-width: 1000px) { .groups { grid-template-columns: 1fr 1fr; } .color-group { grid-column: 1 / -1; } }
+        @media (max-width: 600px) {
+            body { margin: 12px; }
+            .groups, main { grid-template-columns: minmax(0, 1fr); }
+            .colors { grid-template-columns: minmax(0, 1fr); }
+            .builder, .export { padding: 12px; }
+        }
+    </style>
+    <style id="previewTheme"></style>
+</head>
+<body>
+    <h1>Per-instance theme builder</h1>
+    <p>Edit a reusable theme live. The left grid inherits it from its section; the right keeps package defaults.</p>
+    <section class="builder" aria-labelledby="builderTitle">
+        <h2 id="builderTitle">Build your theme</h2>
+        <div class="toolbar">
+            <label for="preset">Preset</label>
+            <select id="preset"><option value="dark">Dark</option><option value="light">Light</option><option value="compactConnection">Connection grid</option><option value="connectionForm">Connection form</option><option value="custom" disabled>Custom</option></select>
+            <button id="resetTheme" type="button">Reset theme to dark</button>
+            <input id="theme" type="checkbox" checked><label for="theme">Theme</label>
+            <input id="sheets" type="checkbox" checked><label for="sheets">Custom editor sheet</label>
+        </div>
+        <div class="groups">
+            <fieldset class="color-group"><legend>Colors</legend><div id="colorControls" class="colors"></div></fieldset>
+            <fieldset><legend>Typography</legend>
+                <div class="control"><label for="fontFamily">Font family</label>
+                    <select id="fontFamily" data-key="fontFamily"><option value="system-ui">System UI</option><option value="Arial, sans-serif">Arial</option><option value="monospace">Monospace</option><option value="Georgia, serif">Georgia</option></select>
+                </div>
+                <div class="control"><label for="fontSize">Font size (px)</label><input id="fontSize" data-key="fontSize" type="number" min="12" max="18" step="1" value="14" aria-describedby="numericHelp fitHelp"></div>
+                <div class="control"><label for="expanderFilter">Expanders</label><select id="expanderFilter" data-key="expanderFilter"><option value="invert(1)">Inverted (dark)</option><option value="none">Original (light)</option></select></div>
+                <div class="control"><label for="expanderOpacity">Expander opacity</label><input id="expanderOpacity" data-key="expanderOpacity" type="number" min="0.25" max="1" step="0.05" value="1" aria-describedby="numericHelp"></div>
+            </fieldset>
+            <fieldset><legend>Spacing, radius &amp; density</legend>
+                <div class="control"><label for="headerPadding">Header padding (px)</label><input id="headerPadding" data-key="headerPadding" type="number" min="0" max="12" step="1" value="5" aria-describedby="numericHelp"></div>
+                <div class="control"><label for="descriptionPadding">Description padding (px)</label><input id="descriptionPadding" data-key="descriptionPadding" type="number" min="0" max="12" step="1" value="5" aria-describedby="numericHelp"></div>
+                <div class="control"><label for="editorPadding">Editor padding (px)</label><input id="editorPadding" data-key="editorPadding" type="number" min="0" max="2" step="1" value="0" aria-describedby="numericHelp fitHelp"></div>
+                <div class="control"><label for="treeRadius">Tree radius (px)</label><input id="treeRadius" data-key="treeRadius" type="number" min="0" max="12" step="1" value="4" aria-describedby="numericHelp"></div>
+                <div class="control"><label for="editorRadius">Editor radius (px)</label><input id="editorRadius" data-key="editorRadius" type="number" min="0" max="12" step="1" value="2" aria-describedby="numericHelp"></div>
+                <label for="density">Row height (22–64px)</label>
+                <input id="density" data-key="rowHeight" type="range" min="22" max="64" step="1" value="28" aria-describedby="fitHelp">
+                <div class="toolbar"><output id="height" for="density">28px</output><button id="reset" type="button">Reset to 22px</button></div>
+            </fieldset>
+            <fieldset id="rowControls"><legend>Rows &amp; columns</legend></fieldset>
+            <fieldset id="editorControls"><legend>Editor sizing &amp; focus</legend></fieldset>
+            <fieldset id="headerControls"><legend>Type-name header</legend></fieldset>
+            <fieldset id="descriptionControls"><legend>Description region</legend></fieldset>
+            <fieldset id="categoryControls"><legend>Categories &amp; expander image</legend></fieldset>
+        </div>
+        <p id="numericHelp" class="help">Limits appear on each numeric control: name share 25–70%, row height 22–64px, optional editor height 16–48px, fonts 12–18px, padding/radii 0–12px (editor 0–2px). Empty, incomplete or out-of-range entries keep the last valid preview and export until corrected; presets and theme reset replace all entries. Category inset is local name-cell padding, not hierarchy indentation; the expander slot stays 20px.</p>
+        <p id="fitHelp" class="help"></p>
+    </section>
+    <main>
+        <section id="themeHost" class="themed"><h2>Themed</h2>
+            <node-projects-property-grid id="styled" row-height="28" expanded></node-projects-property-grid>
+        </section>
+        <section><h2>Default</h2>
+            <node-projects-property-grid id="plain" expanded></node-projects-property-grid>
+        </section>
+    </main>
+    <p>Click a property to view its description. Edit a field, then change density without replacing it.</p>
+    <pre id="values"></pre>
+    <section class="export" aria-labelledby="exportTitle">
+        <h2 id="exportTitle">Use this theme</h2>
+        <p>Apply <code>inspector-theme</code> to a grid or an ancestor that contains only grids you want to theme. Optional part rules below match either placement (wrappers must forward parts). The export retains your settings even when the preview theme is off.</p>
+        <p class="help">The custom title editor sheet uses editor variables with native fallbacks when the theme is off. Explicit author class, inline or stylesheet rules can override theme defaults; adapt your own custom editors to consume the same variables. This sample sheet is not included in the CSS export.</p>
+        <label for="cssExport">Reusable CSS (including optional category/title parts)</label>
+        <textarea id="cssExport" readonly spellcheck="false" aria-describedby="copyStatus"></textarea>
+        <button id="copyCss" type="button">Copy CSS</button>
+        <p id="copyStatus" role="status" aria-live="polite">CSS is ready to copy, or select it above for manual copying.</p>
+        <h3>Layout — apply separately in JavaScript</h3>
+        <pre id="densityExport"></pre>
+        <p class="help">Layout (row height, column share, header and description visibility) remains active when Theme is off; only appearance variables and part rules are removed. Use <code>rowHeight</code> and <code>nameColumnRatio</code>, not CSS row heights or column widths. Fonts, editor padding, borders and focus outlines must fit inside the fixed row; multiline rows are not supported. Editor height is optional: Auto keeps native sizing and never stretches checkboxes/radios. Optional height, native separator styles and nested focus borders require CSS container style-query support (current Chromium); missing tokens preserve original defaults.</p>
+    </section>
+    <script type="module">
+        import '../dist/index.js';
+        const definitions = [{ name: 'Example', properties: [
+            { name: 'title', type: 'string', description: 'A custom light-DOM editor.' },
+            { name: 'count', type: 'number', nullable: true, description: 'Nullable numeric value.' },
+            { name: 'enabled', type: 'boolean', category: 'General' },
+            { name: 'mode', type: 'enum', values: ['small', 'large'], category: 'General' },
+            { name: 'extra', type: 'any', category: 'General', description: 'Choose the active value type.' }
+        ] }];
+        const styled = document.querySelector('#styled');
+        const plain = document.querySelector('#plain');
+        const editorSheet = new CSSStyleSheet();
+        editorSheet.replaceSync(`.sample-editor input {
+            background: var(--pg-editor-background, revert);
+            color: var(--pg-editor-color, revert);
+            border: var(--pg-editor-border, revert);
+            border-radius: var(--pg-editor-radius, revert);
+            padding: var(--pg-editor-padding, revert);
+            font-family: var(--pg-editor-font-family, var(--pg-font-family, revert));
+            font-size: var(--pg-editor-font-size, revert);
+            accent-color: var(--pg-editor-accent-color, auto);
+        }
+        .sample-editor input:focus-visible {
+            outline-color: var(--pg-editor-focus-color, var(--pg-focus-color, revert));
+            outline-style: var(--pg-editor-focus-style, revert);
+            outline-width: var(--pg-editor-focus-width, revert);
+        }
+        @container style(--pg-editor-focus-border) {
+            .sample-editor input:not([type="checkbox"]):not([type="radio"]):focus {
+                border: var(--pg-editor-focus-border);
+            }
+        }
+        @container style(--pg-editor-height) {
+            .sample-editor { display: flex; align-items: center; min-width: 0; max-height: var(--wb-row-inner-height); }
+            .sample-editor input:not([type="checkbox"]):not([type="radio"]) {
+                height: var(--pg-editor-height);
+                max-height: var(--wb-row-inner-height);
+            }
+        }`);
+        styled.additionalStyleSheets = [editorSheet];
+        styled.getSpecialEditorForType = async (property, value, path) => {
+            if (property.name !== 'title') return null;
+            const root = document.createElement('div');
+            root.className = 'sample-editor';
+            const input = document.createElement('input');
+            // Layout remains usable when the optional editor theme sheet is disabled.
+            input.style.width = '100%';
+            input.style.minWidth = '0';
+            input.style.boxSizing = 'border-box';
+            input.value = value ?? '';
+            input.onblur = () => styled.setPropertyValue(path, input.value);
+            root.append(input);
+            return root;
+        };
+        for (const grid of [styled, plain]) {
+            grid.showHead = true;
+            grid.typeName = 'Example';
+            grid.typeDefinitions = definitions;
+            grid.selectedObject = { title: 'Hello', count: 3, enabled: true, mode: 'small', extra: 'Notes' };
+            grid.propertyChanged.on(() => {
+                document.querySelector('#values').textContent = JSON.stringify(styled.selectedObject, null, 2);
+            });
+        }
+        // One canonical state drives control synchronization, scoped CSS and both exports.
+        const colors = [
+            ['background', 'Tree background', '--pg-background', '#20252d', '#ffffff'],
+            ['color', 'Tree text', '--pg-color', '#e5eaf2', '#303946'],
+            ['borderColor', 'Tree border', '--pg-border-color', '#586575', '#8290a0'],
+            ['gridColor', 'Grid separators', '--pg-grid-color', '#394555', '#d6dde5'],
+            ['focusColor', 'Focus / title', '--pg-focus-color', '#89baff', '#275dc5'],
+            ['hoverBackground', 'Hover background', '--pg-hover-background', '#303f51', '#eef5fc'],
+            ['hoverBorderColor', 'Hover border', '--pg-hover-border-color', '#586575', '#b7cbe0'],
+            ['selectedBackground', 'Selection background', '--pg-selected-background', '#364d6b', '#dcecff'],
+            ['selectedBorderColor', 'Selection border', '--pg-selected-border-color', '#89baff', '#548ad3'],
+            ['selectedHoverBackground', 'Selection hover', '--pg-selected-hover-background', '#405f83', '#c9e0fc'],
+            ['selectedHoverBorderColor', 'Selection hover border', '--pg-selected-hover-border-color', '#a3cbff', '#275dc5'],
+            ['headerBackground', 'Header background', '--pg-header-background', '#303946', '#edf1f6'],
+            ['headerColor', 'Header text', '--pg-header-color', '#e5eaf2', '#303946'],
+            ['descriptionBackground', 'Description background', '--pg-description-background', '#303946', '#f3f5f8'],
+            ['descriptionColor', 'Description text', '--pg-description-color', '#e5eaf2', '#303946'],
+            ['editorBackground', 'Editor background', '--pg-editor-background', '#20252d', '#ffffff'],
+            ['editorColor', 'Editor text', '--pg-editor-color', '#e5eaf2', '#303946'],
+            ['editorBorderColor', 'Editor border', '--pg-editor-border', '#586575', '#8290a0'],
+            ['editorAccentColor', 'Editor accent', '--pg-editor-accent-color', '#89baff', '#275dc5']
+        ];
+        // Empty tokens represent native/transparent fallbacks until a connection preset opts in.
+        const extraColors = [
+            ['rowBackground', 'Base row', '--pg-row-background'],
+            ['alternateRowBackground', 'Alternate row', '--pg-alternate-row-background'],
+            ['categoryBackground', 'Category background', '--pg-category-background'],
+            ['rowSeparatorColor', 'Row separator', '--pg-row-separator-color'],
+            ['cellSeparatorColor', 'Cell separator', '--pg-cell-separator-color']
+        ];
+        const dimensions = {
+            fontSize: ['--pg-font-size', '--pg-header-font-size', '--pg-description-font-size', '--pg-editor-font-size'],
+            headerPadding: ['--pg-header-padding'], descriptionPadding: ['--pg-description-padding'],
+            editorPadding: ['--pg-editor-padding'], treeRadius: ['--pg-tree-radius'], editorRadius: ['--pg-editor-radius']
+        };
+        const extraDefaults = {
+            rowBackground: '', alternateRowBackground: '', categoryBackground: '', rowSeparatorColor: '', cellSeparatorColor: '',
+            cellPaddingX: 2, categoryNameInset: 0, categoryFontWeight: '700',
+            rowSeparatorStyle: 'solid', cellSeparatorStyle: 'solid', nameColumnRatio: 50,
+            editorHeightEnabled: false, editorHeight: 21, editorBorderWidth: 1, editorBorderStyle: 'solid',
+            editorFocusBorderWidth: 1, editorFocusBorderStyle: 'dashed', editorFocusBorderColor: '#70c0e7', editorFocusStyle: 'auto', editorFocusWidth: 1,
+            showHead: true, showDescription: true, headerFontWeight: 'inherit', headerFontSize: 'inherit', headerBorderVisible: true,
+            headerBorderColor: '#d3d3d3', descriptionBorderColor: '#d6dde5',
+            descriptionFontWeight: 'inherit', descriptionFontSize: 'inherit', descriptionBorderVisible: false,
+            descriptionMinHeightEnabled: false, descriptionMinHeight: 0, descriptionMaxHeightEnabled: false, descriptionMaxHeight: 120,
+            expanderSize: 12, expanderPosition: '3px 3px'
+        };
+        const presets = Object.fromEntries(['dark', 'light'].map((name, index) => [name, {
+            ...extraDefaults,
+            ...Object.fromEntries(colors.map(([key, , , dark, light]) => [key, index ? light : dark])),
+            fontFamily: 'system-ui', fontSize: 14, headerPadding: 5, descriptionPadding: 5,
+            editorPadding: 0, treeRadius: 4, editorRadius: 2, rowHeight: 28,
+            expanderFilter: index ? 'none' : 'invert(1)', expanderOpacity: 1
+        }]));
+        const connectionPalette = {
+            background: '#ffffff', color: '#62676f', borderColor: '#c6cad0', gridColor: '#d9dce1', focusColor: '#527da6',
+            hoverBackground: '#e9edf2', hoverBorderColor: '#d2d7df', selectedBackground: '#dce6ef', selectedBorderColor: '#9db4ca',
+            selectedHoverBackground: '#d5e1ed', selectedHoverBorderColor: '#839fb9', headerBackground: '#f1f2f4', headerColor: '#50565e',
+            descriptionBackground: '#f1f2f4', descriptionColor: '#62676f', editorBackground: '#ffffff', editorColor: '#62676f',
+            editorBorderColor: '#c6cad0', editorAccentColor: '#527da6', editorFocusBorderColor: '#527da6',
+            headerBorderColor: '#d9dce1', descriptionBorderColor: '#d9dce1'
+        };
+        presets.compactConnection = { ...presets.light, ...connectionPalette,
+            rowBackground: '#ffffff', alternateRowBackground: '#f8f9fa', categoryBackground: '#eeeeef',
+            rowSeparatorColor: '#d9dce1', cellSeparatorColor: '#d9dce1',
+            rowHeight: 22, nameColumnRatio: 45, headerPadding: 0, descriptionPadding: 0,
+            cellPaddingX: 0, categoryNameInset: 0, categoryFontWeight: '400', treeRadius: 0, editorRadius: 0,
+            editorHeightEnabled: true, editorHeight: 20, editorBorderWidth: 0, editorBorderStyle: 'solid',
+            headerFontWeight: '600', headerBorderVisible: true, showHead: true, showDescription: false
+        };
+        presets.connectionForm = { ...presets.light, ...connectionPalette,
+            rowBackground: '#f1f2f4', alternateRowBackground: '#f1f2f4', categoryBackground: '#e8eaee',
+            rowSeparatorColor: '#ffffff', cellSeparatorColor: '#ffffff', rowSeparatorStyle: 'solid', cellSeparatorStyle: 'none',
+            rowHeight: 48, nameColumnRatio: 40, cellPaddingX: 8, categoryNameInset: 8, categoryFontWeight: '600',
+            editorHeightEnabled: true, editorHeight: 30, editorBorderWidth: 1, editorBorderStyle: 'solid', editorRadius: 3,
+            headerPadding: 8, headerFontWeight: '600', headerBorderVisible: true, treeRadius: 0,
+            descriptionPadding: 8, descriptionBorderVisible: true, descriptionMinHeightEnabled: true, descriptionMinHeight: 48,
+            descriptionMaxHeightEnabled: true, descriptionMaxHeight: 96, showHead: true, showDescription: false,
+            expanderSize: 12, expanderPosition: 'center'
+        };
+        const choices = {
+            separator: ['solid', 'dashed', 'dotted', 'none'], weight: ['inherit', '400', '500', '600', '700'],
+            font: ['inherit', '12', '13', '14', '15', '16', '17', '18']
+        };
+        const newControls = {
+            rowControls: [
+                ['nameColumnRatio', 'Name column share (%)', 25, 70], ['cellPaddingX', 'Cell horizontal padding (px)', 0, 12],
+                ['rowSeparatorStyle', 'Row separator style', choices.separator], ['cellSeparatorStyle', 'Cell separator style', choices.separator]
+            ],
+            editorControls: [
+                ['editorHeightEnabled', 'Explicit editor height (off = Auto)', Boolean], ['editorHeight', 'Editor height (px)', 16, 48],
+                ['editorBorderWidth', 'Editor border width (px)', 0, 4], ['editorBorderStyle', 'Editor border style', choices.separator],
+                ['editorFocusBorderWidth', 'Focus border width (px)', 0, 4], ['editorFocusBorderStyle', 'Focus border style', choices.separator],
+                ['editorFocusStyle', 'Focus outline style', ['auto', 'solid', 'dashed', 'dotted', 'none']], ['editorFocusWidth', 'Focus outline width (px)', 0, 4]
+            ],
+            headerControls: [
+                ['showHead', 'Show type-name header', Boolean], ['headerFontWeight', 'Header font weight', choices.weight],
+                ['headerFontSize', 'Header font size (px; inherit linked size)', choices.font], ['headerBorderVisible', 'Show header border', Boolean]
+            ],
+            descriptionControls: [
+                ['showDescription', 'Show description', Boolean], ['descriptionFontWeight', 'Description font weight', choices.weight],
+                ['descriptionFontSize', 'Description font size (px; inherit linked size)', choices.font], ['descriptionBorderVisible', 'Show description border', Boolean],
+                ['descriptionMinHeightEnabled', 'Enable minimum description height', Boolean], ['descriptionMinHeight', 'Description min height (px)', 0, 160],
+                ['descriptionMaxHeightEnabled', 'Enable maximum description height', Boolean], ['descriptionMaxHeight', 'Description max height (px)', 24, 240]
+            ],
+            categoryControls: [
+                ['categoryFontWeight', 'Category font weight', choices.weight], ['categoryNameInset', 'Category local name inset (px)', 0, 24],
+                ['expanderSize', 'Expander image size (px)', 6, 18], ['expanderPosition', 'Expander image position', ['3px 3px', 'center', 'left center', 'right center']]
+            ]
+        };
+        for (const [group, entries] of Object.entries(newControls)) {
+            for (const [key, text, type, max] of entries) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'control';
+                const label = document.createElement('label');
+                label.htmlFor = key;
+                label.textContent = text;
+                const input = document.createElement(Array.isArray(type) ? 'select' : 'input');
+                input.id = key;
+                input.dataset.key = key;
+                if (Array.isArray(type)) {
+                    for (const value of type) input.add(new Option(value === 'inherit' ? 'Inherit' : value, value));
+                } else if (type === Boolean) input.type = 'checkbox';
+                else {
+                    input.type = 'number'; input.min = type; input.max = max; input.step = 1;
+                    input.setAttribute('aria-describedby', 'numericHelp fitHelp');
+                    input.title = `${type}–${max}`;
+                }
+                wrapper.append(label, input);
+                document.querySelector(`#${group}`).append(wrapper);
+            }
+        }
+        for (const [key, group] of [['headerPadding', 'headerControls'], ['descriptionPadding', 'descriptionControls'],
+            ['expanderFilter', 'categoryControls'], ['expanderOpacity', 'categoryControls']]) {
+            document.querySelector(`#${group}`).append(document.querySelector(`#${key}`).closest('.control'));
+        }
+        colors.push(...extraColors.map(([key, label, token]) => [key, label, token, '', '']));
+        colors.push(['headerBorderColor', 'Header border', null], ['descriptionBorderColor', 'Description border', null]);
+        colors.push(['editorFocusBorderColor', 'Editor focus border', null]);
+        for (const [key, labelText] of colors) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'control';
+            const label = document.createElement('label');
+            label.htmlFor = key;
+            label.textContent = labelText;
+            const input = document.createElement('input');
+            input.type = extraColors.some(([extra]) => extra === key) ? 'text' : 'color';
+            if (input.type === 'text') {
+                input.placeholder = 'Auto'; input.pattern = '#[0-9a-fA-F]{6}|'; input.style.width = '80px';
+                input.title = 'Auto (empty) or six-digit hex color';
+            }
+            input.id = key;
+            input.dataset.key = key;
+            wrapper.append(label, input);
+            document.querySelector('#colorControls').append(wrapper);
+        }
+        const controls = [...document.querySelectorAll('[data-key]')];
+        const drafts = new Set();
+        let state = { ...presets.dark };
+        let selectedPreset = 'dark';
+        let themeEnabled = true;
+        let previewRegionHeights = '';
+        let copyRequest = 0;
+        let copyPending = false;
+        const cssExport = document.querySelector('#cssExport');
+        const copyStatus = document.querySelector('#copyStatus');
+        const copyButton = document.querySelector('#copyCss');
+        const declarations = () => {
+            const tokens = colors.filter(([key, , token]) => token && state[key] !== '').map(([key, , token]) => [token,
+                key === 'editorBorderColor' ? `${state.editorBorderWidth}px ${state.editorBorderStyle} ${state[key]}` : state[key]]);
+            tokens.push(['--pg-font-family', state.fontFamily], ['--pg-editor-font-family', state.fontFamily]);
+            for (const [key, names] of Object.entries(dimensions)) {
+                for (const name of names) tokens.push([name, `${state[key]}px`]);
+            }
+            tokens.push(['--pg-expander-filter', state.expanderFilter], ['--pg-expander-opacity', state.expanderOpacity],
+                ['--pg-description-title-margin', '0 0 4px'], ['--pg-description-text-margin', '0']);
+            for (const [key, token] of [
+                ['cellPaddingX', '--pg-cell-padding-x'], ['categoryNameInset', '--pg-category-name-inset'], ['expanderSize', '--pg-expander-size']
+            ]) tokens.push([token, `${state[key]}px`]);
+            tokens.push(['--pg-row-separator-style', state.rowSeparatorStyle], ['--pg-cell-separator-style', state.cellSeparatorStyle],
+                ['--pg-category-font-weight', state.categoryFontWeight], ['--pg-header-font-weight', state.headerFontWeight],
+                ['--pg-description-font-weight', state.descriptionFontWeight], ['--pg-expander-position', state.expanderPosition],
+                ['--pg-editor-focus-border', `${state.editorFocusBorderWidth}px ${state.editorFocusBorderStyle} ${state.editorFocusBorderColor}`],
+                ['--pg-editor-focus-style', state.editorFocusStyle], ['--pg-editor-focus-width', `${state.editorFocusWidth}px`]);
+            if (state.editorHeightEnabled) tokens.push(['--pg-editor-height', `${state.editorHeight}px`]);
+            for (const region of ['header', 'description']) {
+                if (state[`${region}FontSize`] !== 'inherit') {
+                    const existing = tokens.find(([name]) => name === `--pg-${region}-font-size`);
+                    existing[1] = `${state[`${region}FontSize`]}px`;
+                }
+                tokens.push([`--pg-${region}-border`, state[`${region}BorderVisible`] ? `1px solid ${state[`${region}BorderColor`]}` : '0px solid transparent']);
+            }
+            if (state.descriptionMinHeightEnabled) tokens.push(['--pg-description-min-height', `${state.descriptionMinHeight}px`]);
+            if (state.descriptionMaxHeightEnabled) tokens.push(['--pg-description-max-height', `${state.descriptionMaxHeight}px`]);
+            return tokens.map(([name, value]) => `    ${name}: ${value};`).join('\n');
+        };
+        const partRules = selector => `${selector}::part(category-row) { font-weight: var(--pg-category-font-weight); }\n${selector}::part(description-title) { color: var(--pg-focus-color); }`;
+        const update = (patch = {}, { source = null, preset = null } = {}) => {
+            state = preset ? { ...presets[preset] } : { ...state, ...patch };
+            if (preset) {
+                selectedPreset = preset;
+                drafts.clear();
+            } else if (Object.keys(patch).length) selectedPreset = 'custom';
+            for (const control of controls) {
+                if (control === source || drafts.has(control)) continue;
+                if (control.type === 'checkbox') control.checked = state[control.dataset.key];
+                else {
+                    const value = String(state[control.dataset.key]);
+                    if (control.value !== value) control.value = value;
+                }
+                control.removeAttribute('aria-invalid');
+            }
+            document.querySelector('#preset').value = selectedPreset;
+            document.querySelector('#themeHost').classList.toggle('themed', themeEnabled);
+            const tokens = declarations();
+            document.querySelector('#previewTheme').textContent = `#themeHost.themed {\n${tokens}\n}\n${partRules('#themeHost.themed #styled')}`;
+            const regionHeights = themeEnabled
+                ? `${state.descriptionMinHeightEnabled ? state.descriptionMinHeight : 'auto'}/${state.descriptionMaxHeightEnabled ? state.descriptionMaxHeight : 'none'}`
+                : 'auto/none';
+            const regionHeightsChanged = previewRegionHeights !== regionHeights;
+            previewRegionHeights = regionHeights;
+            // One update batch: existing layout setters already resize after the
+            // style injection. Height-only changes reapply the public visibility
+            // setter, including changes coalesced away by ResizeObserver. Never
+            // resize for color edits or rebuild editors with refresh().
+            const layoutChanged = styled.rowHeight !== state.rowHeight || styled.nameColumnRatio !== state.nameColumnRatio / 100 ||
+                styled.showHead !== state.showHead || styled.showDescription !== state.showDescription;
+            if (styled.rowHeight !== state.rowHeight) styled.rowHeight = state.rowHeight;
+            if (styled.nameColumnRatio !== state.nameColumnRatio / 100) styled.nameColumnRatio = state.nameColumnRatio / 100;
+            if (styled.showHead !== state.showHead) styled.showHead = state.showHead;
+            if (styled.showDescription !== state.showDescription) styled.showDescription = state.showDescription;
+            else if (state.showDescription && regionHeightsChanged && !layoutChanged) styled.showDescription = state.showDescription;
+            document.querySelector('#height').value = `${state.rowHeight}px`;
+            const border = Math.max(state.editorBorderStyle === 'none' ? 0 : state.editorBorderWidth,
+                state.editorFocusBorderStyle === 'none' ? 0 : state.editorFocusBorderWidth);
+            const nativeFit = Math.ceil(state.fontSize * 1.2) + 2 * state.editorPadding + 2 * Math.max(1, border);
+            const outline = ['none', 'auto'].includes(state.editorFocusStyle) ? 0 : 2 * state.editorFocusWidth;
+            const editorFit = state.editorHeightEnabled ? state.editorHeight : nativeFit;
+            const invalidDescriptionFit = state.descriptionMinHeightEnabled && state.descriptionMaxHeightEnabled && state.descriptionMinHeight > state.descriptionMaxHeight;
+            document.querySelector('#fitHelp').textContent = nativeFit > state.rowHeight - 2 || editorFit + outline > state.rowHeight - 2 ||
+                (state.editorHeightEnabled && nativeFit > state.editorHeight) || invalidDescriptionFit
+                ? 'Fit warning: increase row height or reduce font size/editor padding so controls fit the fixed row.'
+                : 'Row height controls virtualization, not CSS. If a font or custom editor clips, increase density or reduce padding.';
+            const css = `.inspector-theme {\n${tokens}\n}\n\n/* Optional parts: class on a grid or an ancestor; includes forwarded wrapper parts. */\n${partRules('.inspector-theme')}\n${partRules('.inspector-theme *')}`;
+            if (cssExport.value !== css) {
+                cssExport.value = css;
+                ++copyRequest; // A previous async copy cannot report success for a newer export.
+                copyStatus.textContent = 'CSS updated. Copy again, or select it above for manual copying.';
+            }
+            document.querySelector('#densityExport').textContent = `grid.rowHeight = ${state.rowHeight};\ngrid.nameColumnRatio = ${state.nameColumnRatio / 100};\ngrid.showHead = ${state.showHead};\ngrid.showDescription = ${state.showDescription};`;
+        };
+        for (const control of controls) {
+            control.oninput = () => {
+                let value = control.value;
+                if (control.type === 'checkbox') value = control.checked;
+                if (control.type === 'number' || control.type === 'range') {
+                    value = control.valueAsNumber;
+                    if (!Number.isFinite(value) || !control.validity.valid) {
+                        drafts.add(control);
+                        control.setAttribute('aria-invalid', 'true');
+                        return;
+                    }
+                }
+                if (!control.validity.valid) {
+                    drafts.add(control);
+                    control.setAttribute('aria-invalid', 'true');
+                    return;
+                }
+                drafts.delete(control);
+                control.removeAttribute('aria-invalid');
+                const patch = { [control.dataset.key]: value };
+                // Preserve the original linked font control even after independent region sizes.
+                if (control.dataset.key === 'fontSize') Object.assign(patch, { headerFontSize: 'inherit', descriptionFontSize: 'inherit' });
+                update(patch, { source: control });
+            };
+        }
+        document.querySelector('#preset').onchange = event => update({}, { preset: event.target.value });
+        document.querySelector('#resetTheme').onclick = () => update({}, { preset: 'dark' });
+        document.querySelector('#theme').onchange = event => {
+            themeEnabled = event.target.checked;
+            update();
+        };
+        document.querySelector('#sheets').onchange = event => {
+            styled.additionalStyleSheets = event.target.checked ? [editorSheet] : [];
+        };
+        document.querySelector('#reset').onclick = () => update({ rowHeight: 22 });
+        copyButton.onclick = async () => {
+            // Keep the button focusable, but serialize writes so an older copy cannot finish last.
+            if (copyPending) return;
+            copyPending = true;
+            copyButton.setAttribute('aria-disabled', 'true');
+            copyButton.setAttribute('aria-busy', 'true');
+            const request = ++copyRequest;
+            copyStatus.textContent = 'Copying CSS…';
+            try {
+                if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+                await navigator.clipboard.writeText(cssExport.value);
+                if (request === copyRequest) copyStatus.textContent = 'CSS copied to clipboard. Apply density separately with the JavaScript snippet.';
+            } catch {
+                if (request !== copyRequest) return;
+                copyStatus.textContent = 'Could not copy CSS: clipboard unavailable or permission denied. Select the CSS above and copy manually (Ctrl+C / Cmd+C).';
+                // A delayed permission response must not interrupt resumed property editing.
+                if (document.activeElement === copyButton) {
+                    cssExport.focus();
+                    cssExport.select();
+                }
+            } finally {
+                copyPending = false;
+                copyButton.removeAttribute('aria-disabled');
+                copyButton.removeAttribute('aria-busy');
+            }
+        };
+        update();
+    </script>
+</body>
+</html>
