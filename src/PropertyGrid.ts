@@ -380,6 +380,13 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                 outline-style: var(--pg-editor-focus-style, revert);
                 outline-width: var(--pg-editor-focus-width, revert);
             }
+            :where(button[part~="collection-edit"]) {
+                flex-shrink: 0;
+                min-height: 0;
+                max-height: var(--wb-row-inner-height, 20px);
+                line-height: 1;
+                margin: 0;
+            }
             @container style(--pg-editor-height) {
                 :where(input[part~="editor"]:not([type="checkbox"]):not([type="radio"]), select[part~="editor"], textarea[part~="editor"], button[part~="editor"]) {
                     height: var(--pg-editor-height);
@@ -434,8 +441,6 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
         [part~="collection-action"], [part~="collection-key"] {
             box-sizing: border-box;
-            background: var(--pg-editor-background, Field);
-            color: var(--pg-editor-color, FieldText);
             border: var(--pg-editor-border, 1px solid #888);
             border-radius: var(--pg-editor-radius, 3px);
             padding: var(--pg-editor-padding, 4px 8px);
@@ -447,6 +452,25 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
         }
         [part~="collection-action"]:disabled {
             opacity: 0.5;
+        }
+        :is(button[part~="collection-edit"], button[part~="collection-action"]):where(:enabled) {
+            cursor: pointer;
+        }
+        @layer property-grid-editors {
+            :where([part~="collection-action"], [part~="collection-key"]) {
+                background: var(--pg-editor-background, Field);
+                color: var(--pg-editor-color, FieldText);
+            }
+            :where(button[part~="collection-edit"]:enabled:hover, button[part~="collection-action"]:enabled:hover) {
+                background-color: var(--pg-collection-button-hover-background, var(--pg-hover-background, #e5f3fb));
+                color: var(--pg-collection-button-hover-color, var(--pg-editor-color, ButtonText));
+            }
+            @supports (background-color: color-mix(in srgb, white, black)) {
+                :where(button[part~="collection-edit"]:enabled:hover, button[part~="collection-action"]:enabled:hover) {
+                    background-color: var(--pg-collection-button-hover-background,
+                        color-mix(in srgb, var(--pg-editor-background, ButtonFace) 88%, var(--pg-editor-color, ButtonText)));
+                }
+            }
         }
 
         div.wunderbaum span.wb-node i.wb-expander {

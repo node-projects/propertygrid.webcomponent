@@ -189,6 +189,8 @@
                         { "name": "--pg-collection-padding", "default": "16px", "description": "Modal padding" },
                         { "name": "--pg-collection-backdrop", "default": "rgb(0 0 0 / 35%)", "description": "Native modal backdrop" },
                         { "name": "--pg-collection-error-color", "default": "#b42318", "description": "Modal validation and factory error color" },
+                        { "name": "--pg-collection-button-hover-background", "default": "color-mix(in srgb, var(--pg-editor-background, ButtonFace) 88%, var(--pg-editor-color, ButtonText))", "description": "Enabled collection Edit and dialog button hover background. Without color-mix support falls back to --pg-hover-background or #e5f3fb. Disabled buttons do not receive hover styles." },
+                        { "name": "--pg-collection-button-hover-color", "default": "var(--pg-editor-color, ButtonText)", "description": "Enabled collection Edit and dialog button hover text color" },
                         { "name": "--pg-row-background", "default": "transparent", "description": "Low-priority zero-specificity layered background-color only, excluding hover/active/selected; preserves author backgrounds and renderer images" },
                         { "name": "--pg-alternate-row-background", "default": "var(--pg-row-background, transparent)", "description": "Layered alternate background-color with stable virtualization parity; author and interaction states win; images preserved" },
                         { "name": "--pg-category-background", "default": "var(--pg-row-background, transparent)", "description": "Layered category background-color only; author and interaction states win; images preserved" },

@@ -459,6 +459,87 @@ test('standalone sample uses default appearance, edits a named object and switch
     await expect(page.locator('#output')).toContainText('"x"');
 });
 
+test('collection Edit buttons fit default rows and retain their label at narrow widths', async ({ page }) => {
+    await page.goto('/sample/collections.html');
+    const grid = page.locator('#grid');
+    const buttons = grid.locator('[part~="collection-edit"]');
+    await expect(buttons).toHaveCount(4);
+    for (const width of [1280, 320]) {
+        await page.setViewportSize({ width, height: 900 });
+        for (const height of [22, 28, 48]) {
+            await grid.evaluate((e, height) => e.rowHeight = height, height);
+            expect(await buttons.evaluateAll(elements => elements.every(button => {
+                const cell = button.closest('[part~="property-value"]');
+                const b = button.getBoundingClientRect(), c = cell.getBoundingClientRect();
+                const style = getComputedStyle(cell);
+                return b.top >= c.top - 0.1 && b.bottom <= c.bottom + 0.1 &&
+                    b.left >= c.left && b.right <= c.right - parseFloat(style.borderRightWidth) + 0.1 &&
+                    button.scrollWidth <= button.clientWidth && button.scrollHeight <= button.clientHeight;
+            }))).toBe(true);
+        }
+    }
+});
+
+test('enabled collection buttons change color on hover, reset on leave and honor theme overrides', async ({ page }) => {
+    await setup(page);
+    const edit = page.locator('#collections [part~="collection-edit"]');
+    const background = await edit.evaluate(e => getComputedStyle(e).backgroundColor);
+    await edit.hover();
+    expect(await edit.evaluate(e => getComputedStyle(e).backgroundColor)).not.toBe(background);
+    await page.mouse.move(0, 0);
+    await expect(edit).toHaveCSS('background-color', background);
+    await edit.click();
+    const buttons = outer(page).locator('button:enabled');
+    for (const button of await buttons.all()) {
+        await page.mouse.move(0, 0);
+        const normal = await button.evaluate(e => getComputedStyle(e).backgroundColor);
+        await button.hover();
+        expect(await button.evaluate(e => getComputedStyle(e).backgroundColor)).not.toBe(normal);
+        await page.mouse.move(0, 0);
+        await expect(button).toHaveCSS('background-color', normal);
+    }
+    const disabled = outer(page).getByRole('button', { name: 'Move up', exact: true });
+    const disabledColor = await disabled.evaluate(e => getComputedStyle(e).backgroundColor);
+    await disabled.hover({ force: true });
+    await expect(disabled).toHaveCSS('background-color', disabledColor);
+    await page.locator('#collections').evaluate(e => {
+        e.style.setProperty('--pg-collection-button-hover-background', 'rgb(25, 65, 95)');
+        e.style.setProperty('--pg-collection-button-hover-color', 'rgb(235, 245, 255)');
+    });
+    const apply = outer(page).getByRole('button', { name: 'Apply', exact: true });
+    await apply.hover();
+    await expect(apply).toHaveCSS('background-color', 'rgb(25, 65, 95)');
+    await expect(apply).toHaveCSS('color', 'rgb(235, 245, 255)');
+    await outer(page).getByRole('button', { name: 'Cancel', exact: true }).click();
+    await edit.hover();
+    await expect(edit).toHaveCSS('background-color', 'rgb(25, 65, 95)');
+});
+
+test('collection button hover defaults preserve consumer sheet colors and authored hover styles', async ({ page }) => {
+    await setup(page);
+    await page.locator('#collections').evaluate(e => {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('button { background: rgb(15,20,25); color: rgb(245,245,245); }');
+        e.additionalStyleSheets = [sheet];
+    });
+    const edit = page.locator('#collections [part~="collection-edit"]');
+    await edit.hover();
+    await expect(edit).toHaveCSS('background-color', 'rgb(15, 20, 25)');
+    await expect(edit).toHaveCSS('color', 'rgb(245, 245, 245)');
+    await edit.click();
+    const apply = outer(page).getByRole('button', { name: 'Apply', exact: true });
+    await apply.hover();
+    await expect(apply).toHaveCSS('background-color', 'rgb(15, 20, 25)');
+    await expect(apply).toHaveCSS('color', 'rgb(245, 245, 245)');
+    await page.locator('#collections').evaluate(e => {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('@layer consumer { button:hover { background: rgb(25,65,95); color: rgb(235,245,255); } }');
+        e.additionalStyleSheets = [sheet];
+    });
+    await expect(apply).toHaveCSS('background-color', 'rgb(25, 65, 95)');
+    await expect(apply).toHaveCSS('color', 'rgb(235, 245, 255)');
+});
+
 for (const type of ['string', 'number']) {
     test(`nullable ${type} items preserve null and explicitly enable a value`, async ({ page }) => {
         await setup(page, { value: [null], item: { type, nullable: true } });

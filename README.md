@@ -137,6 +137,8 @@ by Wunderbaum's host defaults. Prefer the public `--pg-*` API.
 | `--pg-collection-radius`, `--pg-collection-padding` | `6px`, `16px` |
 | `--pg-collection-backdrop` | `rgb(0 0 0 / 35%)` |
 | `--pg-collection-error-color` | `#b42318` |
+| `--pg-collection-button-hover-background` | Editor/button surface mixed with 12% editor/button text color; fallback to `--pg-hover-background` or `#e5f3fb` without `color-mix` support |
+| `--pg-collection-button-hover-color` | `--pg-editor-color`, otherwise `ButtonText`; enabled Edit/dialog buttons only |
 
 Row/base/alternate/category backgrounds exclude hovered, active and selected rows so
 interaction colors win. Background hooks are zero-specificity layered
