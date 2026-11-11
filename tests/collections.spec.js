@@ -480,6 +480,21 @@ test('collection Edit buttons fit default rows and retain their label at narrow 
     }
 });
 
+test('inline padding reaches collection buttons, dictionary keys and draft editors', async ({ page }) => {
+    await setup(page, { type: 'dictionary', value: { first: 'one' } });
+    await page.evaluate(() => grid.style.cssText = '--pg-editor-padding: 1px 3px; --pg-editor-padding-inline: 8px');
+    await expect(page.locator('#collections [part~="collection-edit"]')).toHaveCSS('padding', '1px 8px');
+    await open(page);
+    for (const control of [outer(page).getByRole('button', { name: 'Apply', exact: true }),
+        outer(page).locator('[part~="collection-key"]'), await valueInput(page)]) {
+        await expect(control).toHaveCSS('padding', '1px 8px');
+    }
+    await page.evaluate(() => grid.style.removeProperty('--pg-editor-padding-inline'));
+    await expect(outer(page).locator('[part~="collection-key"]')).toHaveCSS('padding', '1px 3px');
+    await outer(page).getByRole('button', { name: 'Cancel', exact: true }).click();
+    expect((await result(page)).events).toBe(0);
+});
+
 test('enabled collection buttons change color on hover, reset on leave and honor theme overrides', async ({ page }) => {
     await setup(page);
     const edit = page.locator('#collections [part~="collection-edit"]');

@@ -86,6 +86,7 @@ by Wunderbaum's host defaults. Prefer the public `--pg-*` API.
 | `--pg-row-separator-style`, `--pg-cell-separator-style` | `solid`; supports `solid`, `dashed`, `dotted`, `none` without changing 1px geometry |
 | `--pg-cell-padding-x` | `2px` horizontal cell padding, bridged to `--wb-col-padding-x` |
 | `--pg-category-name-inset` | `0px` extra **local** name-cell padding, not per-depth indentation |
+| `--pg-indent` | `20px` per-depth hierarchy indentation; expander slot remains `20px` |
 | `--pg-category-font-weight` | Inherited weight |
 | `--pg-focus-color` | Focused tree border `#275dc5`; editor outline fallback |
 | `--pg-hover-background` | Wunderbaum's original pale blue hover |
@@ -121,6 +122,7 @@ by Wunderbaum's host defaults. Prefer the public `--pg-*` API.
 | `--pg-editor-border` | Native border; direct text/number/color/select controls retain Wunderbaum's borderless default |
 | `--pg-editor-radius` | Native border radius |
 | `--pg-editor-padding` | Native padding |
+| `--pg-editor-padding-inline` | Optional inline-axis override of editor padding; leaves block padding unchanged |
 | `--pg-editor-font-family` | `--pg-font-family`, otherwise native font |
 | `--pg-editor-font-size` | Native font size |
 | `--pg-editor-height` | Native sizing (existing `.form-control` fallback `21px`); opt-in text/select/textarea/button height capped to inner row height; checkbox/radio and wrapper roots keep their existing sizing, including `21px` class roots |
@@ -152,20 +154,39 @@ Wunderbaum's built-in unfocused-grid separator specificity, so later scoped addi
 CSS-part border authorship can override them. Missing tokens leave the original
 border cascade, including last-cell behavior, untouched; explicit cell tokens theme
 all grid-cell dividers. Authored borders still follow the normal cascade and CSS parts
-are never masked. Category inset adds local padding without changing the existing
-20px hierarchy/expander slot; expander variables affect only its background image.
+are never masked. Category inset adds local padding, while `--pg-indent` changes
+per-depth hierarchy spacing without changing the `20px` expander slot. Name labels
+adjust to the available width when indentation changes; expander variables affect
+only the background image.
 
-The **new optional separator, editor-height and nested focus-border hooks require
-CSS container style-query support** for inherited custom properties (supported by
-current Chromium). Browsers without that support retain the original sizing and
-separator styles rather than applying those hooks. No JavaScript CSS-variable
-watchers are installed. With no editor-height token there is no new min-width,
-max-height, centering or checkbox alignment. With it, low-priority layered
-`:where()` rules size eligible native controls and center built-in nullable/any
-wrappers; ordinary/later-layer author sizing still wins. Existing `.form-control`
-eligible controls use a capped token height, while checkbox/radio and non-native
-wrapper class roots retain `21px`. Custom wrappers should provide their own
-opt-in centering and height caps. Focus outline tokens apply only to `:focus-visible`.
+Value cells and built-in nullable/any wrappers vertically center their editors by
+default, without requiring an editor-height token. Custom wrapper contents should
+provide their own internal alignment. Any editors keep a `4px` gap between the
+non-shrinking type selector and the value control, which fills the remaining width.
+Ordinary/later-layer author alignment and spacing win.
+
+The **optional separator, inline-padding, indent, editor-height and nested
+focus-border hooks require CSS container style-query support** for inherited custom
+properties (supported by current Chromium). Browsers without that support retain
+original spacing, sizing and separator styles. No JavaScript CSS-variable watchers
+are installed. Without an editor-height token, only the any editor uses a zero
+minimum width to fit its controls; no height caps are added.
+With it, low-priority layered `:where()` rules size eligible native controls;
+ordinary/later-layer author sizing still wins. Existing `.form-control` eligible
+controls use a capped token height, while checkbox/radio and non-native wrapper
+class roots retain `21px`. Custom wrappers should provide their own height caps.
+Focus outline tokens apply only to `:focus-visible`.
+
+For example, increase text inset without increasing editor height and reduce
+hierarchy indentation:
+
+```css
+node-projects-property-grid {
+    --pg-editor-padding: 1px 2px;
+    --pg-editor-padding-inline: 8px;
+    --pg-indent: 12px;
+}
+```
 
 ### Supported CSS parts
 

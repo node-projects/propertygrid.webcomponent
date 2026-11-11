@@ -602,6 +602,43 @@ test('custom title editor fits its value cell at all supported fonts and respons
     }
 });
 
+test('inline padding and hierarchy indent controls preview, export, validate and reset independently', async ({ page }) => {
+    await load(page);
+    const grid = page.locator('#styled'), title = grid.locator('.sample-editor input');
+    await expect(page.locator('#editorPaddingInline')).toHaveValue('');
+    await expect(page.locator('#indent')).toHaveValue('');
+    await grid.locator('[part~="category-row"] [part~="expander"]').click();
+    await setControl(page, 'editorPadding', 1);
+    await setControl(page, 'editorPaddingInline', 8);
+    await setControl(page, 'indent', 12);
+    for (const input of [title, row(grid, 'count').locator('[part~="editor-number"]')]) {
+        await expect(input).toHaveCSS('padding', '1px 8px');
+    }
+    await expect(row(grid, 'mode').locator('.wb-indent:not(.wb-expander)')).toHaveCSS('width', '12px');
+    await expect(row(grid, 'mode').locator('.wb-expander')).toHaveCSS('width', '20px');
+    await expect(page.locator('#cssExport')).toHaveValue(/--pg-editor-padding-inline: 8px;/);
+    await expect(page.locator('#cssExport')).toHaveValue(/--pg-indent: 12px;/);
+    await page.locator('#sheets').uncheck();
+    await expect(title).toHaveCSS('padding', '1px 8px');
+    await page.locator('#theme').uncheck();
+    await expect(row(grid, 'mode').locator('.wb-indent:not(.wb-expander)')).toHaveCSS('width', '20px');
+    await page.locator('#theme').check();
+    await expect(row(grid, 'mode').locator('.wb-indent:not(.wb-expander)')).toHaveCSS('width', '12px');
+    await setControl(page, 'indent', -1);
+    await expect(page.locator('#indent')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('#cssExport')).toHaveValue(/--pg-indent: 12px;/);
+    await page.locator('#indent').fill('');
+    await page.locator('#editorPaddingInline').fill('');
+    await expect(row(grid, 'mode').locator('.wb-indent:not(.wb-expander)')).toHaveCSS('width', '20px');
+    await expect(title).toHaveCSS('padding', '1px');
+    expect(await page.locator('#cssExport').inputValue()).not.toMatch(/--pg-(indent|editor-padding-inline):/);
+    await setControl(page, 'editorPaddingInline', 6); await setControl(page, 'indent', 10);
+    await page.locator('#resetTheme').click();
+    await expect(page.locator('#editorPaddingInline')).toHaveValue('');
+    await expect(page.locator('#indent')).toHaveValue('');
+    expect(await page.locator('#cssExport').inputValue()).not.toMatch(/--pg-(indent|editor-padding-inline):/);
+});
+
 const managedControls = page => page.locator('[data-key]').evaluateAll(controls => Object.fromEntries(controls.map(c => [c.dataset.key, c.type === 'checkbox' ? c.checked : c.value])));
 
 test('connection presets are complete, round-trip all managed state and isolate the comparison', async ({ page }) => {
