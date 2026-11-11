@@ -371,6 +371,39 @@ test('styled nullable, enum, boolean and any editors keep existing value behavio
     expect(await page.evaluate(() => changes.some(event => event.property === 'count' && event.newValue === 42))).toBe(true);
 });
 
+test('any editor shares cell width without overlap in native and themed layouts', async ({ page }) => {
+    await load(page);
+    await page.evaluate(() => createGrid());
+    const grid = page.locator('#grid'); await waitForEditors(page);
+    const any = row(grid, 'extra'), selector = any.locator('[part~="any-type-selector"]');
+    for (const theme of ['', '--pg-editor-height: 20px; --pg-editor-padding-inline: 4px']) {
+        await grid.evaluate((g, theme) => g.style.cssText = theme, theme);
+        for (const width of [440, 320, 220]) {
+            await grid.evaluate((g, width) => g.style.width = `${width}px`, width);
+            for (const type of ['string', 'number', 'boolean', 'null']) {
+                await selector.selectOption(type);
+                const bounds = await any.locator('[part~="property-value"]').evaluate(cell => {
+                    const rect = cell.getBoundingClientRect();
+                    const wrapper = cell.querySelector('[part~="any-editor"]').getBoundingClientRect();
+                    const select = cell.querySelector('select').getBoundingClientRect();
+                    const input = [...cell.querySelectorAll('input')].find(e => e.getBoundingClientRect().width);
+                    const value = input?.getBoundingClientRect();
+                    return { wrapperRight: rect.right - wrapper.right, selectWidth: select.width,
+                        valueWidth: value?.width, valueRight: value && rect.right - value.right,
+                        gap: value && value.left - select.right };
+                });
+                expect(bounds.wrapperRight, `${width}px ${type}`).toBeGreaterThanOrEqual(0);
+                expect(bounds.selectWidth).toBeGreaterThan(0);
+                if (type !== 'null') {
+                    expect(bounds.valueWidth).toBeGreaterThan(0);
+                    expect(bounds.valueRight, `${width}px ${type}`).toBeGreaterThanOrEqual(0);
+                    expect(bounds.gap, `${width}px ${type}`).toBeGreaterThanOrEqual(4);
+                }
+            }
+        }
+    }
+});
+
 test('custom editor root and native descendants get additive parts, sheets stay outside nested shadows', async ({ page }) => {
     await load(page);
     await page.evaluate(() => {
@@ -833,7 +866,14 @@ async function appearance(grid) {
 
 async function adoptOriginal(grid, sample = false) {
     await grid.evaluate((g, { originalStyle, sample }) => {
-        const sheet = new CSSStyleSheet(); sheet.replaceSync(originalStyle);
+        const sheet = new CSSStyleSheet();
+        // Compare historical appearance except for the intentional centering/any-layout fixes.
+        sheet.replaceSync(`${originalStyle}\n@layer property-grid-editors {
+            :where([part~="property-value"], [part~="editor-wrapper"]) { align-items: center; }
+            :where([part~="any-editor"]) { gap: 4px; min-width: 0; }
+            :where([part~="any-type-selector"]) { flex-shrink: 0; }
+            :where([part~="any-editor"] > input:not([type="checkbox"])) { flex: 1; min-width: 0; }
+        }`);
         const sheets = [g.shadowRoot.adoptedStyleSheets[0], sheet];
         if (sample) {
             const editor = new CSSStyleSheet();
@@ -967,6 +1007,133 @@ test('color-only inherited separator queries paint native borders and leave feed
     await expect(title).toHaveCSS('border-bottom', '2px dotted rgb(255, 0, 0)');
     await expect(cell).toHaveCSS('border-top', '1px dotted rgb(181, 55, 59)');
     await expect(cell).toHaveCSS('border-image-source', 'none');
+});
+
+test('editors and nullable/any wrappers center vertically without a height token', async ({ page }) => {
+    await load(page);
+    await page.evaluate(() => {
+        const grid = createGrid();
+        grid.typeDefinitions[0].properties.push({ name: 'items', type: 'array', collection: { item: { type: 'string' } } },
+            { name: 'radio', type: 'string' });
+        grid.getSpecialEditorForType = async property => {
+            if (property.name !== 'radio') return null;
+            const input = document.createElement('input'); input.type = 'radio'; return input;
+        };
+    });
+    const grid = page.locator('#grid'); await waitForEditors(page);
+    await expect(row(grid, 'radio').locator('input')).toBeVisible();
+    for (const height of [22, 48]) {
+        await grid.evaluate((g, height) => g.rowHeight = height, height);
+        for (const name of ['title', 'count', 'enabled', 'mode', 'extra', 'items', 'radio']) {
+            const cell = row(grid, name).locator('[part~="property-value"]');
+            await expect(cell).toHaveCSS('align-items', 'center');
+            const offsets = await cell.evaluate(cell => [...cell.querySelectorAll('[part~="editor"]')]
+                .filter(e => e.getBoundingClientRect().height && e.matches('input, select, button'))
+                .map(e => {
+                    const rect = e.getBoundingClientRect(), parent = e.parentElement.getBoundingClientRect();
+                    const style = getComputedStyle(e);
+                    return rect.top + rect.height / 2 - parent.top - parent.height / 2 -
+                        (parseFloat(style.marginTop) - parseFloat(style.marginBottom)) / 2;
+                }));
+            for (const offset of offsets) expect(Math.abs(offset), `${height}px ${name}`).toBeLessThanOrEqual(0.6);
+        }
+    }
+    await grid.evaluate(g => {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('[part~="property-value"], [part~="editor-wrapper"] { align-items: flex-start; }');
+        g.additionalStyleSheets = [sheet];
+    });
+    await expect(row(grid, 'title').locator('[part~="property-value"]')).toHaveCSS('align-items', /^(flex|flow)-start$/);
+    await expect(row(grid, 'count').locator('[part~="editor-wrapper"]')).toHaveCSS('align-items', /^(flex|flow)-start$/);
+});
+
+test('inherited inline padding overrides the shorthand without changing block padding or author rules', async ({ page }) => {
+    await load(page);
+    await page.evaluate(() => {
+        const host = document.createElement('section');
+        host.style.cssText = '--pg-editor-padding: 1px 3px; --pg-editor-padding-inline: 9px 7px';
+        document.body.append(host); createGrid(host); createGrid(document.body, 'plain');
+    });
+    const grid = page.locator('#grid'); await waitForEditors(page); await waitForEditors(page, 'plain');
+    for (const name of ['title', 'count', 'mode', 'extra']) {
+        for (const editor of await row(grid, name).locator('input:not([type="checkbox"]), select').all()) {
+            if (!await editor.isVisible()) continue;
+            await expect(editor).toHaveCSS('padding-top', '1px');
+            await expect(editor).toHaveCSS('padding-bottom', '1px');
+            await expect(editor).toHaveCSS('padding-left', '9px');
+            await expect(editor).toHaveCSS('padding-right', '7px');
+        }
+    }
+    await expect(row(page.locator('#plain'), 'title').locator('input')).not.toHaveCSS('padding-left', '9px');
+    await grid.evaluate(g => g.parentElement.style.removeProperty('--pg-editor-padding-inline'));
+    await expect(row(grid, 'title').locator('input')).toHaveCSS('padding', '1px 3px');
+    await grid.evaluate(g => {
+        g.parentElement.style.setProperty('--pg-editor-padding-inline', '12px');
+        const sheet = new CSSStyleSheet(); sheet.replaceSync('input { padding: 2px 5px; }'); g.additionalStyleSheets = [sheet];
+    });
+    await expect(row(grid, 'title').locator('input')).toHaveCSS('padding', '2px 5px');
+});
+
+test('expanders stay vertically centered and toggle at tall row heights with and without indentation', async ({ page }) => {
+    await load(page);
+    await page.evaluate(() => createGrid());
+    const grid = page.locator('#grid'); await waitForEditors(page);
+    const expander = row(grid, 'nested').locator('[part~="expander"]');
+    for (const indent of [null, '12px']) {
+        await grid.evaluate((g, indent) => {
+            if (indent === null) g.style.removeProperty('--pg-indent');
+            else g.style.setProperty('--pg-indent', indent);
+        }, indent);
+        for (const height of [22, 28, 48, 64]) {
+            await grid.evaluate((g, height) => g.rowHeight = height, height);
+            const offset = await expander.evaluate(e => {
+                const icon = e.getBoundingClientRect(), cell = e.parentElement.getBoundingClientRect();
+                return icon.top + icon.height / 2 - cell.top - cell.height / 2;
+            });
+            expect(offset, `${height}px row, indent=${indent}`).toBeCloseTo(0, 1);
+            await expect(expander).toHaveCSS('background-image', /expanderClose\.svg/);
+            await expander.click();
+            await expect(row(grid, 'child')).toHaveCount(0);
+            await expect(expander).toHaveCSS('background-image', /expander\.svg/);
+            await expander.click();
+            await expect(row(grid, 'child').locator('input')).toBeVisible();
+        }
+    }
+});
+
+test('hierarchy indent changes per depth with live label widths and fixed expander slots', async ({ page }) => {
+    await load(page);
+    await page.evaluate(() => {
+        const host = document.createElement('section'); document.body.append(host);
+        const grid = createGrid(host);
+        grid.typeDefinitions[1].properties.push({ name: 'deeper', type: 'Deep' });
+        grid.typeDefinitions.push({ name: 'Deep', properties: [{ name: 'longPropertyNameForTruncation', type: 'string' }] });
+    });
+    const grid = page.locator('#grid'); await waitForEditors(page);
+    const leaf = row(grid, 'longPropertyNameForTruncation'), cell = leaf.locator('[part~="property-name"]');
+    await expect(leaf.locator('input')).toBeVisible();
+    const native = await cell.locator('.wb-title').boundingBox();
+    for (const indent of [0, 12, 32]) {
+        await grid.evaluate((g, indent) => g.parentElement.style.setProperty('--pg-indent', `${indent}px`), indent);
+        const indents = cell.locator('.wb-indent:not(.wb-expander)');
+        await expect(indents).toHaveCount(2);
+        for (const slot of await indents.all()) await expect(slot).toHaveCSS('width', `${indent}px`);
+        await expect(cell.locator('.wb-expander')).toHaveCSS('width', '20px');
+        const bounds = await cell.evaluate(cell => {
+            const rect = cell.getBoundingClientRect(), title = cell.querySelector('.wb-title').getBoundingClientRect();
+            return { inset: title.left - rect.left, right: rect.right - title.right, width: title.width };
+        });
+        expect(bounds.inset).toBeCloseTo(2 + 20 + 2 * indent, 1);
+        expect(bounds.right).toBeCloseTo(3, 1);
+        expect(bounds.width).toBeGreaterThan(0);
+        await grid.evaluate(g => g.nameColumnRatio = 0.65);
+        const wider = await cell.locator('.wb-title').boundingBox();
+        expect(wider.width).toBeGreaterThan(bounds.width);
+        await grid.evaluate(g => g.nameColumnRatio = 0.5);
+    }
+    await grid.evaluate(g => g.parentElement.style.removeProperty('--pg-indent'));
+    await expect(cell).toHaveCSS('display', 'block');
+    expect((await cell.locator('.wb-title').boundingBox()).width).toBeCloseTo(native.width, 1);
 });
 
 test('optional native heights exclude form-control checkboxes, radios and wrapper roots and respect class sizing', async ({ page }) => {

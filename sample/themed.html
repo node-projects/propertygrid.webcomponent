@@ -91,7 +91,7 @@
             <fieldset id="descriptionControls"><legend>Description region</legend></fieldset>
             <fieldset id="categoryControls"><legend>Categories &amp; expander image</legend></fieldset>
         </div>
-        <p id="numericHelp" class="help">Limits appear on each numeric control: name share 25–70%, row height 22–64px, optional editor height 16–48px, fonts 12–18px, padding/radii 0–12px (editor 0–2px). Empty, incomplete or out-of-range entries keep the last valid preview and export until corrected; presets and theme reset replace all entries. Category inset is local name-cell padding, not hierarchy indentation; the expander slot stays 20px.</p>
+        <p id="numericHelp" class="help">Limits appear on each numeric control: name share 25–70%, row height 22–64px, optional editor height 16–48px, fonts 12–18px, padding/radii 0–12px (editor shorthand 0–2px, inline padding 0–24px), hierarchy indent 0–40px. Empty inline-padding and indent entries use Auto; other empty, incomplete or out-of-range entries keep the last valid preview and export until corrected. Presets and theme reset replace all entries. Category inset is local name-cell padding; hierarchy indent is per depth, and the expander slot stays 20px.</p>
         <p id="fitHelp" class="help"></p>
     </section>
     <main>
@@ -114,7 +114,7 @@
         <p id="copyStatus" role="status" aria-live="polite">CSS is ready to copy, or select it above for manual copying.</p>
         <h3>Layout — apply separately in JavaScript</h3>
         <pre id="densityExport"></pre>
-        <p class="help">Layout (row height, column share, header and description visibility) remains active when Theme is off; only appearance variables and part rules are removed. Use <code>rowHeight</code> and <code>nameColumnRatio</code>, not CSS row heights or column widths. Fonts, editor padding, borders and focus outlines must fit inside the fixed row; multiline rows are not supported. Editor height is optional: Auto keeps native sizing and never stretches checkboxes/radios. Optional height, native separator styles and nested focus borders require CSS container style-query support (current Chromium); missing tokens preserve original defaults.</p>
+        <p class="help">Layout (row height, column share, header and description visibility) remains active when Theme is off; only appearance variables and part rules are removed. Use <code>rowHeight</code> and <code>nameColumnRatio</code>, not CSS row heights or column widths. Fonts, editor padding, borders and focus outlines must fit inside the fixed row; multiline rows are not supported. Editors are vertically centered by default. Editor height is optional: Auto keeps native sizing and never stretches checkboxes/radios. Optional inline padding, hierarchy indent, height, native separator styles and nested focus borders require CSS container style-query support (current Chromium); missing tokens preserve original spacing and sizing.</p>
     </section>
     <script type="module">
         import '../dist/index.js';
@@ -142,6 +142,9 @@
             outline-color: var(--pg-editor-focus-color, var(--pg-focus-color, revert));
             outline-style: var(--pg-editor-focus-style, revert);
             outline-width: var(--pg-editor-focus-width, revert);
+        }
+        @container style(--pg-editor-padding-inline) {
+            .sample-editor input { padding-inline: var(--pg-editor-padding-inline); }
         }
         @container style(--pg-editor-focus-border) {
             .sample-editor input:not([type="checkbox"]):not([type="radio"]):focus {
@@ -216,7 +219,7 @@
         };
         const extraDefaults = {
             rowBackground: '', alternateRowBackground: '', categoryBackground: '', rowSeparatorColor: '', cellSeparatorColor: '',
-            cellPaddingX: 2, categoryNameInset: 0, categoryFontWeight: '700',
+            cellPaddingX: 2, categoryNameInset: 0, categoryFontWeight: '700', editorPaddingInline: '', indent: '',
             rowSeparatorStyle: 'solid', cellSeparatorStyle: 'solid', nameColumnRatio: 50,
             editorHeightEnabled: false, editorHeight: 21, editorBorderWidth: 1, editorBorderStyle: 'solid',
             editorFocusBorderWidth: 1, editorFocusBorderStyle: 'dashed', editorFocusBorderColor: '#70c0e7', editorFocusStyle: 'auto', editorFocusWidth: 1,
@@ -266,10 +269,12 @@
         const newControls = {
             rowControls: [
                 ['nameColumnRatio', 'Name column share (%)', 25, 70], ['cellPaddingX', 'Cell horizontal padding (px)', 0, 12],
+                ['indent', 'Hierarchy indent (px; empty = 20)', 0, 40],
                 ['rowSeparatorStyle', 'Row separator style', choices.separator], ['cellSeparatorStyle', 'Cell separator style', choices.separator]
             ],
             editorControls: [
                 ['editorHeightEnabled', 'Explicit editor height (off = Auto)', Boolean], ['editorHeight', 'Editor height (px)', 16, 48],
+                ['editorPaddingInline', 'Editor inline padding (px; empty = Auto)', 0, 24],
                 ['editorBorderWidth', 'Editor border width (px)', 0, 4], ['editorBorderStyle', 'Editor border style', choices.separator],
                 ['editorFocusBorderWidth', 'Focus border width (px)', 0, 4], ['editorFocusBorderStyle', 'Focus border style', choices.separator],
                 ['editorFocusStyle', 'Focus outline style', ['auto', 'solid', 'dashed', 'dotted', 'none']], ['editorFocusWidth', 'Focus outline width (px)', 0, 4]
@@ -358,6 +363,9 @@
             for (const [key, token] of [
                 ['cellPaddingX', '--pg-cell-padding-x'], ['categoryNameInset', '--pg-category-name-inset'], ['expanderSize', '--pg-expander-size']
             ]) tokens.push([token, `${state[key]}px`]);
+            for (const [key, token] of [['editorPaddingInline', '--pg-editor-padding-inline'], ['indent', '--pg-indent']]) {
+                if (state[key] !== '') tokens.push([token, `${state[key]}px`]);
+            }
             tokens.push(['--pg-row-separator-style', state.rowSeparatorStyle], ['--pg-cell-separator-style', state.cellSeparatorStyle],
                 ['--pg-category-font-weight', state.categoryFontWeight], ['--pg-header-font-weight', state.headerFontWeight],
                 ['--pg-description-font-weight', state.descriptionFontWeight], ['--pg-expander-position', state.expanderPosition],
@@ -434,7 +442,9 @@
             control.oninput = () => {
                 let value = control.value;
                 if (control.type === 'checkbox') value = control.checked;
-                if (control.type === 'number' || control.type === 'range') {
+                if (['editorPaddingInline', 'indent'].includes(control.dataset.key) && value === '' && !control.validity.badInput) {
+                    value = '';
+                } else if (control.type === 'number' || control.type === 'range') {
                     value = control.valueAsNumber;
                     if (!Number.isFinite(value) || !control.validity.valid) {
                         drafts.add(control);

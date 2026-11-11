@@ -364,6 +364,20 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
 
         /* Low-priority defaults leave ordinary and later layered author rules intact. */
         @layer property-grid-editors {
+            :where([part~="property-value"], [part~="editor-wrapper"]) {
+                align-items: center;
+            }
+            :where([part~="any-editor"]) {
+                gap: 4px;
+                min-width: 0;
+            }
+            :where([part~="any-type-selector"]) {
+                flex-shrink: 0;
+            }
+            :where([part~="any-editor"] > input:not([type="checkbox"])) {
+                flex: 1;
+                min-width: 0;
+            }
             :where(input[part~="editor"], select[part~="editor"], textarea[part~="editor"], button[part~="editor"]) {
                 background: var(--pg-editor-background, revert);
                 color: var(--pg-editor-color, revert);
@@ -387,6 +401,11 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                 line-height: 1;
                 margin: 0;
             }
+            @container style(--pg-editor-padding-inline) {
+                :where(input[part~="editor"], select[part~="editor"], textarea[part~="editor"], button[part~="editor"]) {
+                    padding-inline: var(--pg-editor-padding-inline);
+                }
+            }
             @container style(--pg-editor-height) {
                 :where(input[part~="editor"]:not([type="checkbox"]):not([type="radio"]), select[part~="editor"], textarea[part~="editor"], button[part~="editor"]) {
                     height: var(--pg-editor-height);
@@ -394,12 +413,8 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
                     min-width: 0;
                 }
                 :where([part~="editor-wrapper"]) {
-                    align-items: center;
                     max-height: var(--wb-row-inner-height);
                     min-width: 0;
-                }
-                :where(input[part~="editor"]:is([type="checkbox"], [type="radio"])) {
-                    align-self: center;
                 }
             }
             @container style(--pg-editor-focus-border) {
@@ -446,6 +461,11 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
             padding: var(--pg-editor-padding, 4px 8px);
             font: inherit;
         }
+        @container style(--pg-editor-padding-inline) {
+            [part~="collection-action"], [part~="collection-key"] {
+                padding-inline: var(--pg-editor-padding-inline);
+            }
+        }
         [part~="collection-action"]:focus-visible, [part~="collection-key"]:focus-visible {
             outline: 2px solid var(--pg-editor-focus-color, var(--pg-focus-color, #275dc5));
             outline-offset: 2px;
@@ -473,7 +493,27 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
             }
         }
 
+        @container style(--pg-indent) {
+            div.wunderbaum span.wb-node:where([part~="property-name"]) {
+                display: flex;
+            }
+            div.wunderbaum span.wb-node i:is(.wb-indent, .wb-expander) {
+                flex-shrink: 0;
+            }
+            div.wunderbaum span.wb-node i.wb-indent:not(.wb-expander) {
+                width: var(--pg-indent);
+                padding-inline: 0;
+            }
+            /* Flex sizing bypasses Wunderbaum's fixed 20px title offsets. */
+            div.wunderbaum span.wb-node span.wb-title {
+                flex: 1;
+                min-width: 0;
+            }
+        }
+
         div.wunderbaum span.wb-node i.wb-expander {
+            vertical-align: top;
+            margin-top: calc((var(--wb-row-inner-height) - var(--wb-icon-outer-height)) / 2);
             background-size: var(--pg-expander-size, 12px) var(--pg-expander-size, 12px);
             background-position: var(--pg-expander-position, 3px 3px);
             filter: var(--pg-expander-filter, none);
