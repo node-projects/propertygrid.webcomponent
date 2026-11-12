@@ -599,6 +599,48 @@ test('virtualization discards late editors even when the tree update version is 
     await expect(row(grid, 'field0').locator('[part~="editor-text"]')).toBeVisible();
 });
 
+for (const count of [13, 40]) test(`auto-height grid retains all ${count} fields after selection and refresh`, async ({ page }) => {
+    await load(page);
+    await page.evaluate(count => {
+        const container = document.createElement('section');
+        container.style.cssText = 'height: 550px; overflow: auto;';
+        const section = document.createElement('div');
+        section.style.height = 'fit-content';
+        container.append(section);
+        document.body.append(container);
+        const grid = createGrid(section);
+        grid.style.height = '100%';
+        grid.showHead = false;
+        grid.showDescription = false;
+        grid.noCategory = true;
+        grid.rowHeight = 48;
+        grid.typeDefinitions = [{ name: 'Example', properties: Array.from({ length: count }, (_, i) => ({ name: `field${i}`, type: 'string' })) }];
+        grid.getSpecialEditorForType = async () => {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            return null;
+        };
+        grid.selectedObject = Object.fromEntries(Array.from({ length: count }, (_, i) => [`field${i}`, `Initial ${i}`]));
+    }, count);
+    const grid = page.locator('#grid');
+    await expect(grid.locator('[part~="editor-text"]')).toHaveCount(count);
+    const height = await grid.locator('[part="tree"]').evaluate(tree => tree.clientHeight);
+    for (const preset of ['FA', 'SRM']) {
+        await grid.evaluate((grid, { count, preset }) => {
+            grid.selectedObject = Object.fromEntries(Array.from({ length: count }, (_, i) => [`field${i}`, `${preset} ${i}`]));
+            if (preset === 'SRM') grid.selectedObject = grid.selectedObject;
+        }, { count, preset });
+        await expect(row(grid, 'field0').locator('input')).toHaveValue(`${preset} 0`);
+        await expect(grid.locator('[part~="row"]')).toHaveCount(count);
+        await expect(grid.locator('[part~="editor-text"]')).toHaveCount(count);
+        await expect(row(grid, `field${count - 1}`).locator('input')).toHaveValue(`${preset} ${count - 1}`);
+        expect(await grid.locator('[part="tree"]').evaluate(tree => tree.clientHeight)).toBe(height);
+    }
+    await grid.evaluate(grid => grid.refresh());
+    await expect(grid.locator('[part~="row"]')).toHaveCount(count);
+    await expect(grid.locator('[part~="editor-text"]')).toHaveCount(count);
+    await expect(row(grid, `field${count - 1}`).locator('input')).toHaveValue(`SRM ${count - 1}`);
+});
+
 test('asynchronous type resolution keeps nested rows, descriptions and context-menu events', async ({ page }) => {
     await load(page);
     await page.evaluate(() => {

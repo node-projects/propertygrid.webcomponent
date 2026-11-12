@@ -1192,8 +1192,11 @@ export class PropertyGrid extends BaseCustomWebComponentConstructorAppend {
             await this.createPropertyNodes(rootObject, typeInfo.properties);
             if (updateVersion !== this._updateVersion)
                 return;
-            this._tree.root.removeChildren();
-            this._tree.addChildren(rootObject);
+            // Avoid measuring an auto-height viewport while the tree is temporarily empty.
+            this._tree.runWithDeferredUpdate(() => {
+                this._tree.root.removeChildren();
+                this._tree.addChildren(rootObject);
+            });
         }
     }
 
