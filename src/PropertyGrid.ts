@@ -103,14 +103,17 @@ export function typeInfoFromJsonSchema(jsonSchemaObj: any, obj: any, type: strin
     };
     scanCollections(jsonSchemaObj);
     for (const name of collectionDefinitions) scanCollections(jsonSchemaObj.definitions?.[name], true);
-    // Collection schemas retain local object references as named types. Scalar and
-    // ordinary reference handling below deliberately follows the existing converter.
+    // Collection schemas retain local object references as named types, while
+    // scalar references use their definition's editor metadata.
     const collectionItem = (schema: any, path: string): IProperty | null => {
         if (!schema || typeof schema !== 'object' || schema.oneOf || schema.anyOf || schema.allOf) return null;
         if (typeof schema.$ref === 'string' && schema.$ref.startsWith('#/definitions/')) {
             const encoded = schema.$ref.slice('#/definitions/'.length);
             const name = encoded.replaceAll('~1', '/').replaceAll('~0', '~');
             if (!encoded || encoded.includes('/') || !jsonSchemaObj.definitions?.[name]) return null;
+            const definition = jsonSchemaObj.definitions[name];
+            if (definition.enum || ['string', 'number', 'boolean'].includes(definition.type))
+                return collectionItem({ ...definition, ...schema, $ref: undefined }, path);
             return { type: name, defaultValue: schema.default, description: schema.description, format: schema.format };
         }
         const common = { defaultValue: schema.default, description: schema.description, format: schema.format };
@@ -130,7 +133,7 @@ export function typeInfoFromJsonSchema(jsonSchemaObj: any, obj: any, type: strin
     let usedType = type ?? obj.type;
     if (usedType) {
         const def = usedType.startsWith('#/') ? pointer(usedType.slice(2)) : jsonSchemaObj.definitions?.[usedType];
-        if (!def)
+        if (!def?.properties)
             return null;
         let tInfo: ITypeInfo = {};
         tInfo.name = usedType;
